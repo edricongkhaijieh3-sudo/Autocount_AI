@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Core ───────────────────────────────────────────────────────
+
+model Company {
+  id              String   @id @default(cuid())
+  name            String
+  address         String?
+  phone           String?
+  email           String?
+  website         String?
+  logoUrl         String?
+  currency        String   @default("MYR")
+  fiscalYearStart Int      @default(1) // Month number 1-12
+  taxId           String?
+  regNo           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users            User[]
+  accounts         Account[]
+  contacts         Contact[]
+  journalEntries   JournalEntry[]
+  invoices         Invoice[]
+  invoiceTemplates InvoiceTemplate[]
+  customFields     CustomField[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("user") // 'admin' | 'user'
+  companyId    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+}
+
+// ─── Chart of Accounts ──────────────────────────────────────────
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+model Account {
+  id          String      @id @default(cuid())
+  code        String
+  name        String
+  type        AccountType
+  description String?
+  parentId    String?
+  isActive    Boolean     @default(true)
+  companyId   String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  parent       Account?      @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children     Account[]     @relation("AccountHierarchy")
+  company      Company       @relation(fields: [companyId], references: [id])
+  journalLines JournalLine[]
+
+  @@unique([code, companyId])
+}
+
+// ─── General Ledger ─────────────────────────────────────────────
+
+model JournalEntry {
+  id          String   @id @default(cuid())
+  entryNo     String
+  date        DateTime
+  description String?
+  reference   String?
+  companyId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company       @relation(fields: [companyId], references: [id])
+  lines   JournalLine[]
+
+  @@unique([entryNo, companyId])
+}
+
+model JournalLine {
+  id             String  @id @default(cuid())
+  journalEntryId String
+  accountId      String
+  description    String?
+  debit          Float   @default(0)
+  credit         Float   @default(0)
+
+  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      Account      @relation(fields: [accountId], references: [id])
+}
+
+// ─── Contacts ───────────────────────────────────────────────────
+
+enum ContactType {
+  CUSTOMER
+  VENDOR
+  BOTH
+}
+
+model Contact {
+  id        String      @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  taxId     String?
+  type      ContactType @default(CUSTOMER)
+  companyId String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  invoices Invoice[]
+}
+
+// ─── Invoicing ──────────────────────────────────────────────────
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum DocType {
+  INVOICE
+  QUOTATION
+  CREDIT_NOTE
+  DEBIT_NOTE
+}
+
+model Invoice {
+  id                String        @id @default(cuid())
+  invoiceNo         String
+  date              DateTime
+  dueDate           DateTime
+  contactId         String
+  status            InvoiceStatus @default(DRAFT)
+  docType           DocType       @default(INVOICE)
+  subtotal          Float         @default(0)
+  taxTotal          Float         @default(0)
+  total             Float         @default(0)
+  notes             String?
+  customFieldValues Json?
+  templateId        String?
+  companyId         String
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  contact  Contact          @relation(fields: [contactId], references: [id])
+  template InvoiceTemplate? @relation(fields: [templateId], references: [id])
+  company  Company          @relation(fields: [companyId], references: [id])
+  lines    InvoiceLine[]
+
+  @@unique([invoiceNo, companyId])
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  itemName    String
+  itemCode    String?
+  description String?
+  quantity    Float   @default(1)
+  unitPrice   Float   @default(0)
+  discount    Float   @default(0)
+  taxRate     Float   @default(0)
+  amount      Float   @default(0)
+  sortOrder   Int     @default(0)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+// ─── Template System (Feature 1) ────────────────────────────────
+
+model InvoiceTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  isDefault Boolean  @default(false)
+  docType   DocType  @default(INVOICE)
+  config    Json
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id])
+  customFields CustomField[]
+  invoices     Invoice[]
+}
+
+model CustomField {
+  id         String  @id @default(cuid())
+  companyId  String
+  templateId String
+  section    String  // 'header' | 'docInfo' | 'billTo' | 'lineItems' | 'totals' | 'footer'
+  fieldName  String  // Display label
+  fieldKey   String  // Internal key
+  fieldType  String  // 'text' | 'number' | 'date' | 'dropdown' | 'checkbox'
+  isRequired Boolean @default(false)
+  sortOrder  Int     @default(0)
+  options    Json?   // For dropdown options
+  defaultVal String?
+
+  company  Company         @relation(fields: [companyId], references: [id])
+  template InvoiceTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
