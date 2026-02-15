@@ -44,6 +44,7 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [docType, setDocType] = useState("INVOICE");
 
   const fetchTemplates = useCallback(async () => {
     const res = await fetch("/api/templates");
@@ -65,7 +66,7 @@ export default function TemplatesPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: formData.get("name"),
-        docType: formData.get("docType"),
+        docType,
       }),
     });
 
@@ -124,7 +125,7 @@ export default function TemplatesPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="docType">Document Type</Label>
-                <Select name="docType" defaultValue="INVOICE">
+                <Select value={docType} onValueChange={setDocType}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

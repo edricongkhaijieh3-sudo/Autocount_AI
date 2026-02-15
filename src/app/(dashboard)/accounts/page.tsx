@@ -71,13 +71,15 @@ export default function AccountsPage() {
     fetchAccounts();
   }, [fetchAccounts]);
 
+  const [accountType, setAccountType] = useState("ASSET");
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const payload = {
       code: formData.get("code") as string,
       name: formData.get("name") as string,
-      type: formData.get("type") as string,
+      type: accountType,
       description: formData.get("description") as string,
     };
 
@@ -136,7 +138,10 @@ export default function AccountsPage() {
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => {
           setDialogOpen(open);
-          if (!open) setEditingAccount(null);
+          if (!open) {
+            setEditingAccount(null);
+            setAccountType("ASSET");
+          }
         }}>
           <DialogTrigger asChild>
             <Button>
@@ -164,8 +169,8 @@ export default function AccountsPage() {
                 <div className="space-y-2">
                   <Label htmlFor="type">Type</Label>
                   <Select
-                    name="type"
-                    defaultValue={editingAccount?.type || "ASSET"}
+                    value={accountType}
+                    onValueChange={setAccountType}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -272,6 +277,7 @@ export default function AccountsPage() {
                                 className="h-8 w-8"
                                 onClick={() => {
                                   setEditingAccount(account);
+                                  setAccountType(account.type);
                                   setDialogOpen(true);
                                 }}
                               >

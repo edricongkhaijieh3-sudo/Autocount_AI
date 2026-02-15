@@ -88,19 +88,30 @@ export default function JournalPage() {
   );
 
   const fetchEntries = useCallback(async () => {
-    const params = new URLSearchParams();
-    if (dateFrom) params.set("dateFrom", dateFrom);
-    if (dateTo) params.set("dateTo", dateTo);
-    const res = await fetch(`/api/journal?${params}`);
-    const data = await res.json();
-    setEntries(data);
-    setLoading(false);
+    try {
+      const params = new URLSearchParams();
+      if (dateFrom) params.set("dateFrom", dateFrom);
+      if (dateTo) params.set("dateTo", dateTo);
+      const res = await fetch(`/api/journal?${params}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setEntries(Array.isArray(data) ? data : []);
+    } catch {
+      setEntries([]);
+    } finally {
+      setLoading(false);
+    }
   }, [dateFrom, dateTo]);
 
   const fetchAccounts = useCallback(async () => {
-    const res = await fetch("/api/accounts");
-    const data = await res.json();
-    setAccounts(data);
+    try {
+      const res = await fetch("/api/accounts");
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setAccounts(Array.isArray(data) ? data : []);
+    } catch {
+      setAccounts([]);
+    }
   }, []);
 
   useEffect(() => {

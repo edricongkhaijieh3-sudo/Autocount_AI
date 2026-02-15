@@ -65,10 +65,16 @@ export default function InvoicesPage() {
   const [search, setSearch] = useState("");
 
   const fetchInvoices = useCallback(async () => {
-    const res = await fetch("/api/invoices");
-    const data = await res.json();
-    setInvoices(data);
-    setLoading(false);
+    try {
+      const res = await fetch("/api/invoices");
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setInvoices(Array.isArray(data) ? data : []);
+    } catch {
+      setInvoices([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {

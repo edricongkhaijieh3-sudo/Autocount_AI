@@ -4,12 +4,14 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
+  try {
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const companyId = (session.user as any).companyId;
+  if (!companyId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const now = new Date();
 
   // This month's date range
@@ -111,4 +113,8 @@ export async function GET() {
     })),
     monthlyRevenue,
   });
+  } catch (error) {
+    console.error("Dashboard stats error:", error);
+    return NextResponse.json({ error: "Failed to load dashboard stats" }, { status: 500 });
+  }
 }
