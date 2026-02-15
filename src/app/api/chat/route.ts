@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     });
 
     const queryResponse = await claude.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-3-5-haiku-20241022",
       max_tokens: 1024,
       system: systemPrompt,
       messages: [
@@ -106,7 +106,7 @@ export async function POST(req: Request) {
     );
 
     const formattedResponse = await claude.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-3-5-haiku-20241022",
       max_tokens: 1024,
       messages: [{ role: "user", content: responsePrompt }],
       temperature: 0.3,
