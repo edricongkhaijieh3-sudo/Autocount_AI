@@ -4,14 +4,14 @@ import { authOptions } from "@/lib/auth";
 import { buildSystemPrompt, buildResponsePrompt } from "@/lib/ai/system-prompt";
 import { validateQuery } from "@/lib/ai/query-validator";
 import { executeQuery } from "@/lib/ai/query-executor";
-import { GoogleGenAI } from "@google/genai";
+import Groq from "groq-sdk";
 
-function getAIClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
+function getGroqClient() {
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY environment variable is not set");
+    throw new Error("GROQ_API_KEY environment variable is not set");
   }
-  return new GoogleGenAI({ apiKey });
+  return new Groq({ apiKey });
 }
 
 export async function POST(req: Request) {
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   const companyName = (session.user as any).companyName;
 
   try {
-    const ai = getAIClient();
+    const groq = getGroqClient();
 
     // Step 1: Generate Prisma query from the question
     const systemPrompt = buildSystemPrompt({
@@ -39,21 +39,21 @@ export async function POST(req: Request) {
       currentDate: new Date().toISOString().split("T")[0],
     });
 
-    const queryResponse = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: `${systemPrompt}\n\nUser question: ${question}`,
-      config: {
-        maxOutputTokens: 1024,
-        temperature: 0.1,
-      },
+    const queryResponse = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: question },
+      ],
+      max_tokens: 1024,
+      temperature: 0.1,
     });
 
-    const aiText = queryResponse.text ?? "";
+    const aiText = queryResponse.choices[0]?.message?.content ?? "";
 
-    // Parse the JSON response from Gemini
+    // Parse the JSON response from Groq
     let parsed;
     try {
-      // Extract JSON from potential markdown code blocks
       const jsonMatch = aiText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error("No JSON found in AI response");
       parsed = JSON.parse(jsonMatch[0]);
@@ -102,17 +102,15 @@ export async function POST(req: Request) {
       validation.query!.explanation
     );
 
-    const formattedResponse = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: responsePrompt,
-      config: {
-        maxOutputTokens: 1024,
-        temperature: 0.3,
-      },
+    const formattedResponse = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [{ role: "user", content: responsePrompt }],
+      max_tokens: 1024,
+      temperature: 0.3,
     });
 
     const responseText =
-      formattedResponse.text ??
+      formattedResponse.choices[0]?.message?.content ??
       "I found the data but had trouble formatting it. Please try again.";
 
     return NextResponse.json({ response: responseText });
@@ -121,25 +119,21 @@ export async function POST(req: Request) {
 
     const errorMessage = error?.message?.toLowerCase() || "";
 
-    // API key not set
-    if (errorMessage.includes("gemini_api_key")) {
+    if (errorMessage.includes("groq_api_key")) {
       return NextResponse.json({
-        response: "The AI assistant is not configured yet. Please set the GEMINI_API_KEY environment variable.",
+        response: "The AI assistant is not configured yet. Please set the GROQ_API_KEY environment variable.",
       });
     }
 
-    // Rate limit
-    if (error?.status === 429 || errorMessage.includes("rate") || errorMessage.includes("quota") || errorMessage.includes("429")) {
+    if (error?.status === 429 || errorMessage.includes("rate") || errorMessage.includes("quota")) {
       return NextResponse.json({
-        response:
-          "The AI is temporarily rate-limited. Please wait a minute and try again. You can still access all reports manually from the Reports page.",
+        response: "The AI is temporarily rate-limited. Please wait a moment and try again.",
       });
     }
 
-    // API key invalid
-    if (error?.status === 400 || error?.status === 403 || errorMessage.includes("api key") || errorMessage.includes("permission") || errorMessage.includes("invalid")) {
+    if (error?.status === 401 || errorMessage.includes("api key") || errorMessage.includes("authentication")) {
       return NextResponse.json({
-        response: "The AI API key appears to be invalid or expired. Please check the GEMINI_API_KEY in your environment variables.",
+        response: "The AI API key appears to be invalid. Please check the GROQ_API_KEY in your environment variables.",
       });
     }
 
