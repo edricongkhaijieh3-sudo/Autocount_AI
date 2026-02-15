@@ -4,14 +4,17 @@ import { authOptions } from "@/lib/auth";
 import { buildSystemPrompt, buildResponsePrompt } from "@/lib/ai/system-prompt";
 import { validateQuery } from "@/lib/ai/query-validator";
 import { executeQuery } from "@/lib/ai/query-executor";
-import Groq from "groq-sdk";
+import OpenAI from "openai";
 
-function getGroqClient() {
-  const apiKey = process.env.GROQ_API_KEY;
+function getDeepSeekClient() {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
-    throw new Error("GROQ_API_KEY environment variable is not set");
+    throw new Error("DEEPSEEK_API_KEY environment variable is not set");
   }
-  return new Groq({ apiKey });
+  return new OpenAI({
+    apiKey,
+    baseURL: "https://api.deepseek.com",
+  });
 }
 
 export async function POST(req: Request) {
@@ -29,7 +32,7 @@ export async function POST(req: Request) {
   const companyName = (session.user as any).companyName;
 
   try {
-    const groq = getGroqClient();
+    const deepseek = getDeepSeekClient();
 
     // Step 1: Generate Prisma query from the question
     const systemPrompt = buildSystemPrompt({
@@ -39,8 +42,8 @@ export async function POST(req: Request) {
       currentDate: new Date().toISOString().split("T")[0],
     });
 
-    const queryResponse = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const queryResponse = await deepseek.chat.completions.create({
+      model: "deepseek-chat",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: question },
@@ -51,7 +54,7 @@ export async function POST(req: Request) {
 
     const aiText = queryResponse.choices[0]?.message?.content ?? "";
 
-    // Parse the JSON response from Groq
+    // Parse the JSON response from DeepSeek
     let parsed;
     try {
       const jsonMatch = aiText.match(/\{[\s\S]*\}/);
@@ -102,8 +105,8 @@ export async function POST(req: Request) {
       validation.query!.explanation
     );
 
-    const formattedResponse = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const formattedResponse = await deepseek.chat.completions.create({
+      model: "deepseek-chat",
       messages: [{ role: "user", content: responsePrompt }],
       max_tokens: 1024,
       temperature: 0.3,
@@ -119,9 +122,15 @@ export async function POST(req: Request) {
 
     const errorMessage = error?.message?.toLowerCase() || "";
 
-    if (errorMessage.includes("groq_api_key")) {
+    if (errorMessage.includes("deepseek_api_key") || errorMessage.includes("api key") && errorMessage.includes("not set")) {
       return NextResponse.json({
-        response: "The AI assistant is not configured yet. Please set the GROQ_API_KEY environment variable.",
+        response: "The AI assistant is not configured yet. Please set the DEEPSEEK_API_KEY environment variable.",
+      });
+    }
+
+    if (error?.status === 402 || errorMessage.includes("insufficient balance") || errorMessage.includes("insufficient_quota")) {
+      return NextResponse.json({
+        response: "Your DeepSeek API account has insufficient balance. Please top up credits at https://platform.deepseek.com to use the AI assistant.",
       });
     }
 
@@ -131,9 +140,9 @@ export async function POST(req: Request) {
       });
     }
 
-    if (error?.status === 401 || errorMessage.includes("api key") || errorMessage.includes("authentication")) {
+    if (error?.status === 401 || errorMessage.includes("authentication") || errorMessage.includes("invalid")) {
       return NextResponse.json({
-        response: "The AI API key appears to be invalid. Please check the GROQ_API_KEY in your environment variables.",
+        response: "The AI API key appears to be invalid. Please check the DEEPSEEK_API_KEY in your environment variables.",
       });
     }
 

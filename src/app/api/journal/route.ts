@@ -51,9 +51,21 @@ export async function POST(req: Request) {
   const body = await req.json();
   const { date, description, reference, lines } = body;
 
-  if (!date || !Array.isArray(lines) || lines.length === 0) {
+  if (!date || !Array.isArray(lines) || lines.length < 2) {
     return NextResponse.json(
-      { error: "Date and at least one line are required" },
+      { error: "Date and at least two lines are required for double-entry" },
+      { status: 400 }
+    );
+  }
+
+  // Reject negative amounts
+  const hasNegative = lines.some(
+    (l: { debit?: number; credit?: number }) =>
+      (Number(l.debit) || 0) < 0 || (Number(l.credit) || 0) < 0
+  );
+  if (hasNegative) {
+    return NextResponse.json(
+      { error: "Negative amounts are not allowed" },
       { status: 400 }
     );
   }
