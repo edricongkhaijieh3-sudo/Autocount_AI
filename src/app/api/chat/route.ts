@@ -6,7 +6,13 @@ import { validateQuery } from "@/lib/ai/query-validator";
 import { executeQuery } from "@/lib/ai/query-executor";
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+function getAIClient() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY environment variable is not set");
+  }
+  return new GoogleGenAI({ apiKey });
+}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -23,6 +29,8 @@ export async function POST(req: Request) {
   const companyName = (session.user as any).companyName;
 
   try {
+    const ai = getAIClient();
+
     // Step 1: Generate Prisma query from the question
     const systemPrompt = buildSystemPrompt({
       companyId,
@@ -109,18 +117,34 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ response: responseText });
   } catch (error: any) {
-    console.error("Chat error:", error);
+    console.error("Chat error:", error?.message || error);
 
-    if (error?.status === 429) {
+    const errorMessage = error?.message?.toLowerCase() || "";
+
+    // API key not set
+    if (errorMessage.includes("gemini_api_key")) {
+      return NextResponse.json({
+        response: "The AI assistant is not configured yet. Please set the GEMINI_API_KEY environment variable.",
+      });
+    }
+
+    // Rate limit
+    if (error?.status === 429 || errorMessage.includes("rate") || errorMessage.includes("quota") || errorMessage.includes("429")) {
       return NextResponse.json({
         response:
-          "You've used your AI queries for now. You can still access all reports manually from the Reports page. Please try again in a few minutes.",
+          "The AI is temporarily rate-limited. Please wait a minute and try again. You can still access all reports manually from the Reports page.",
+      });
+    }
+
+    // API key invalid
+    if (error?.status === 400 || error?.status === 403 || errorMessage.includes("api key") || errorMessage.includes("permission") || errorMessage.includes("invalid")) {
+      return NextResponse.json({
+        response: "The AI API key appears to be invalid or expired. Please check the GEMINI_API_KEY in your environment variables.",
       });
     }
 
     return NextResponse.json({
-      response:
-        "Something went wrong while processing your question. Please try again.",
+      response: `Something went wrong: ${error?.message || "Unknown error"}. Please try again.`,
     });
   }
 }
