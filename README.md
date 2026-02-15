@@ -22,7 +22,7 @@ A full-featured cloud accounting platform built with Next.js, featuring a **Cust
 
 ### Feature 2: AI Business Chat Assistant
 - Natural language questions about your business data
-- Two-step AI pipeline: query generation + response formatting via DeepSeek API (DeepSeek-V3)
+- Two-step AI pipeline: query generation + response formatting via Anthropic Claude API (Claude Sonnet 4)
 - Safe query execution with allowlist validation (read-only, company-scoped)
 - Floating chat panel accessible from every page
 - Suggestion chips for common queries
@@ -38,7 +38,7 @@ A full-featured cloud accounting platform built with Next.js, featuring a **Cust
 | ORM | Prisma 7 with `@prisma/adapter-pg` |
 | Auth | NextAuth.js v4 (credentials provider) |
 | PDF | @react-pdf/renderer |
-| AI | DeepSeek API (DeepSeek-V3) |
+| AI | Anthropic Claude API (Claude Sonnet 4) |
 | Hosting | Vercel |
 
 ---
@@ -76,7 +76,7 @@ git push -u origin main
 | `DATABASE_URL` | Your Neon connection string from Step 1 |
 | `NEXTAUTH_SECRET` | Any random string (run `openssl rand -base64 32` to generate) |
 | `NEXTAUTH_URL` | `https://your-app-name.vercel.app` (update after first deploy) |
-| `DEEPSEEK_API_KEY` | Your DeepSeek API key (from [platform.deepseek.com](https://platform.deepseek.com)) |
+| `ANTHROPIC_API_KEY` | Your Anthropic API key (from [console.anthropic.com](https://console.anthropic.com)) |
 
 4. Click **Deploy** — Vercel will build and deploy automatically
 

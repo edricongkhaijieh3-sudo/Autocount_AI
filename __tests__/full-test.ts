@@ -102,10 +102,10 @@ describe("Environment Variables", () => {
     console.log("  DATABASE_URL: ✅ SET");
   });
 
-  test("should have DEEPSEEK_API_KEY configured", () => {
-    expect(process.env.DEEPSEEK_API_KEY).toBeDefined();
-    expect(process.env.DEEPSEEK_API_KEY).not.toBe("");
-    console.log("  DEEPSEEK_API_KEY: ✅ SET");
+  test("should have ANTHROPIC_API_KEY configured", () => {
+    expect(process.env.ANTHROPIC_API_KEY).toBeDefined();
+    expect(process.env.ANTHROPIC_API_KEY).not.toBe("");
+    console.log("  ANTHROPIC_API_KEY: ✅ SET");
   });
 
   test("should have NEXTAUTH_SECRET configured", () => {
@@ -118,7 +118,7 @@ describe("Environment Variables", () => {
       DATABASE_URL: process.env.DATABASE_URL ? "✅ SET" : "❌ MISSING",
       NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ? "✅ SET" : "❌ MISSING",
       NEXTAUTH_URL: process.env.NEXTAUTH_URL ? "✅ SET" : "❌ MISSING",
-      DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY ? "✅ SET" : "❌ MISSING",
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? "✅ SET" : "❌ MISSING",
     };
 
     console.log("\n📋 ENVIRONMENT VARIABLES STATUS:");
@@ -795,7 +795,7 @@ describe("Financial Reports", () => {
 // SECTION 10: AI CHAT ASSISTANT TESTS (Groq / Llama 3.3)
 // ────────────────────────────────────────────────────────────
 
-describe("AI Chat Assistant (DeepSeek)", () => {
+describe("AI Chat Assistant (Claude)", () => {
   test("should answer 'How many invoices do I have?'", async () => {
     const res = await authFetch("/api/chat", {
       method: "POST",
@@ -965,7 +965,7 @@ afterAll(() => {
   console.log("  ✓ Invoicing (create, status updates, line items)");
   console.log("  ✓ Invoice Template Designer (CRUD + custom fields)");
   console.log("  ✓ Financial Reports (P&L, Balance Sheet, Trial Balance, AR)");
-  console.log("  ✓ AI Chat Assistant (DeepSeek V3)");
+  console.log("  ✓ AI Chat Assistant (Claude Sonnet 4)");
   console.log("  ✓ Dashboard statistics");
   console.log("  ✓ Security (API key leaks, SQL injection, AI safety)");
   console.log("");

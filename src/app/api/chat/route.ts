@@ -4,17 +4,14 @@ import { authOptions } from "@/lib/auth";
 import { buildSystemPrompt, buildResponsePrompt } from "@/lib/ai/system-prompt";
 import { validateQuery } from "@/lib/ai/query-validator";
 import { executeQuery } from "@/lib/ai/query-executor";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 
-function getDeepSeekClient() {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+function getClaudeClient() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error("DEEPSEEK_API_KEY environment variable is not set");
+    throw new Error("ANTHROPIC_API_KEY environment variable is not set");
   }
-  return new OpenAI({
-    apiKey,
-    baseURL: "https://api.deepseek.com",
-  });
+  return new Anthropic({ apiKey });
 }
 
 export async function POST(req: Request) {
@@ -32,7 +29,7 @@ export async function POST(req: Request) {
   const companyName = (session.user as any).companyName;
 
   try {
-    const deepseek = getDeepSeekClient();
+    const claude = getClaudeClient();
 
     // Step 1: Generate Prisma query from the question
     const systemPrompt = buildSystemPrompt({
@@ -42,19 +39,22 @@ export async function POST(req: Request) {
       currentDate: new Date().toISOString().split("T")[0],
     });
 
-    const queryResponse = await deepseek.chat.completions.create({
-      model: "deepseek-chat",
+    const queryResponse = await claude.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1024,
+      system: systemPrompt,
       messages: [
-        { role: "system", content: systemPrompt },
         { role: "user", content: question },
       ],
-      max_tokens: 1024,
       temperature: 0.1,
     });
 
-    const aiText = queryResponse.choices[0]?.message?.content ?? "";
+    const aiText =
+      queryResponse.content[0]?.type === "text"
+        ? queryResponse.content[0].text
+        : "";
 
-    // Parse the JSON response from DeepSeek
+    // Parse the JSON response from Claude
     let parsed;
     try {
       const jsonMatch = aiText.match(/\{[\s\S]*\}/);
@@ -105,16 +105,17 @@ export async function POST(req: Request) {
       validation.query!.explanation
     );
 
-    const formattedResponse = await deepseek.chat.completions.create({
-      model: "deepseek-chat",
-      messages: [{ role: "user", content: responsePrompt }],
+    const formattedResponse = await claude.messages.create({
+      model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
+      messages: [{ role: "user", content: responsePrompt }],
       temperature: 0.3,
     });
 
     const responseText =
-      formattedResponse.choices[0]?.message?.content ??
-      "I found the data but had trouble formatting it. Please try again.";
+      formattedResponse.content[0]?.type === "text"
+        ? formattedResponse.content[0].text
+        : "I found the data but had trouble formatting it. Please try again.";
 
     return NextResponse.json({ response: responseText });
   } catch (error: any) {
@@ -122,15 +123,9 @@ export async function POST(req: Request) {
 
     const errorMessage = error?.message?.toLowerCase() || "";
 
-    if (errorMessage.includes("deepseek_api_key") || errorMessage.includes("api key") && errorMessage.includes("not set")) {
+    if (errorMessage.includes("anthropic_api_key") || (errorMessage.includes("api key") && errorMessage.includes("not set"))) {
       return NextResponse.json({
-        response: "The AI assistant is not configured yet. Please set the DEEPSEEK_API_KEY environment variable.",
-      });
-    }
-
-    if (error?.status === 402 || errorMessage.includes("insufficient balance") || errorMessage.includes("insufficient_quota")) {
-      return NextResponse.json({
-        response: "Your DeepSeek API account has insufficient balance. Please top up credits at https://platform.deepseek.com to use the AI assistant.",
+        response: "The AI assistant is not configured yet. Please set the ANTHROPIC_API_KEY environment variable.",
       });
     }
 
@@ -140,9 +135,15 @@ export async function POST(req: Request) {
       });
     }
 
-    if (error?.status === 401 || errorMessage.includes("authentication") || errorMessage.includes("invalid")) {
+    if (error?.status === 401 || errorMessage.includes("authentication") || errorMessage.includes("invalid api key")) {
       return NextResponse.json({
-        response: "The AI API key appears to be invalid. Please check the DEEPSEEK_API_KEY in your environment variables.",
+        response: "The AI API key appears to be invalid. Please check the ANTHROPIC_API_KEY in your environment variables.",
+      });
+    }
+
+    if (error?.status === 402 || errorMessage.includes("billing") || errorMessage.includes("credit")) {
+      return NextResponse.json({
+        response: "Your Anthropic account needs billing set up. Please check your account at https://console.anthropic.com.",
       });
     }
 
