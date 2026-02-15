@@ -4,11 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { buildSystemPrompt, buildResponsePrompt } from "@/lib/ai/system-prompt";
 import { validateQuery } from "@/lib/ai/query-validator";
 import { executeQuery } from "@/lib/ai/query-executor";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || "",
-});
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -33,19 +31,18 @@ export async function POST(req: Request) {
       currentDate: new Date().toISOString().split("T")[0],
     });
 
-    const queryResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: "user", content: question }],
+    const queryResponse = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: `${systemPrompt}\n\nUser question: ${question}`,
+      config: {
+        maxOutputTokens: 1024,
+        temperature: 0.1,
+      },
     });
 
-    const aiText =
-      queryResponse.content[0].type === "text"
-        ? queryResponse.content[0].text
-        : "";
+    const aiText = queryResponse.text ?? "";
 
-    // Parse the JSON response from Claude
+    // Parse the JSON response from Gemini
     let parsed;
     try {
       // Extract JSON from potential markdown code blocks
@@ -97,16 +94,18 @@ export async function POST(req: Request) {
       validation.query!.explanation
     );
 
-    const formattedResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      messages: [{ role: "user", content: responsePrompt }],
+    const formattedResponse = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: responsePrompt,
+      config: {
+        maxOutputTokens: 1024,
+        temperature: 0.3,
+      },
     });
 
     const responseText =
-      formattedResponse.content[0].type === "text"
-        ? formattedResponse.content[0].text
-        : "I found the data but had trouble formatting it. Please try again.";
+      formattedResponse.text ??
+      "I found the data but had trouble formatting it. Please try again.";
 
     return NextResponse.json({ response: responseText });
   } catch (error: any) {

@@ -22,7 +22,7 @@ A full-featured cloud accounting platform built with Next.js, featuring a **Cust
 
 ### Feature 2: AI Business Chat Assistant
 - Natural language questions about your business data
-- Two-step AI pipeline: query generation + response formatting via Claude API
+- Two-step AI pipeline: query generation + response formatting via Google Gemini API
 - Safe query execution with allowlist validation (read-only, company-scoped)
 - Floating chat panel accessible from every page
 - Suggestion chips for common queries
@@ -38,7 +38,7 @@ A full-featured cloud accounting platform built with Next.js, featuring a **Cust
 | ORM | Prisma 7 with `@prisma/adapter-pg` |
 | Auth | NextAuth.js v4 (credentials provider) |
 | PDF | @react-pdf/renderer |
-| AI | Anthropic Claude API |
+| AI | Google Gemini API |
 | Hosting | Vercel |
 
 ---
@@ -76,7 +76,7 @@ git push -u origin main
 | `DATABASE_URL` | Your Neon connection string from Step 1 |
 | `NEXTAUTH_SECRET` | Any random string (run `openssl rand -base64 32` to generate) |
 | `NEXTAUTH_URL` | `https://your-app-name.vercel.app` (update after first deploy) |
-| `ANTHROPIC_API_KEY` | Your Anthropic API key (from [console.anthropic.com](https://console.anthropic.com)) |
+| `GEMINI_API_KEY` | Your Google Gemini API key (from [aistudio.google.com](https://aistudio.google.com/apikey)) |
 
 4. Click **Deploy** — Vercel will build and deploy automatically
 
