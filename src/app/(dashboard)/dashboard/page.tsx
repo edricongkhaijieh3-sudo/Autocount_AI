@@ -24,12 +24,19 @@ import {
   Users,
   AlertTriangle,
   ArrowRight,
+  Plus,
 } from "lucide-react";
+
+import { CashFlowWidget } from "@/components/dashboard/cash-flow-widget";
+import { OutstandingWidget } from "@/components/dashboard/outstanding-widget";
+import { ProfitLossWidget } from "@/components/dashboard/profit-loss-widget";
+import { ExpensesWidget } from "@/components/dashboard/expenses-widget";
 
 interface DashboardStats {
   revenueThisMonth: number;
   outstandingReceivables: number;
   activeCustomers: number;
+  revenueChange: number;
   overdueInvoices: {
     count: number;
     list: {
@@ -50,7 +57,18 @@ interface DashboardStats {
     status: string;
     contactName: string;
   }[];
-  monthlyRevenue: { month: string; revenue: number }[];
+  cashFlow: { month: string; moneyIn: number; moneyOut: number; netCash: number }[];
+  receivablesAging: {
+    current: number;
+    days31to60: number;
+    days61to90: number;
+    over90: number;
+    total: number;
+  };
+  plThisMonth: { revenue: number; cogs: number; grossProfit: number; expenses: number; netProfit: number };
+  plYTD: { revenue: number; cogs: number; grossProfit: number; expenses: number; netProfit: number };
+  topExpenses: { name: string; amount: number; percentage: number }[];
+  totalExpenses: number;
 }
 
 const statusBadgeVariants: Record<string, string> = {
@@ -62,18 +80,11 @@ const statusBadgeVariants: Record<string, string> = {
 };
 
 function formatAmount(amount: number): string {
-  return `RM ${amount.toLocaleString("en-MY", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return `RM ${amount.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-MY", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return new Date(dateStr).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export default function DashboardPage() {
@@ -86,14 +97,10 @@ export default function DashboardPage() {
       try {
         const res = await fetch("/api/dashboard/stats");
         if (!res.ok) {
-          if (res.status === 401) {
-            setError("Please sign in to view the dashboard.");
-            return;
-          }
+          if (res.status === 401) { setError("Please sign in to view the dashboard."); return; }
           throw new Error("Failed to load stats");
         }
-        const data = await res.json();
-        setStats(data);
+        setStats(await res.json());
       } catch {
         setError("Failed to load dashboard. Please try again.");
       } finally {
@@ -108,19 +115,13 @@ export default function DashboardPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Loading your business overview...
-          </p>
+          <p className="text-muted-foreground">Loading your business overview...</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i} className="animate-pulse">
-              <CardHeader className="pb-2">
-                <div className="h-4 w-24 rounded bg-muted" />
-              </CardHeader>
-              <CardContent>
-                <div className="h-8 w-32 rounded bg-muted" />
-              </CardContent>
+              <CardHeader className="pb-2"><div className="h-4 w-24 rounded bg-muted" /></CardHeader>
+              <CardContent><div className="h-8 w-32 rounded bg-muted" /></CardContent>
             </Card>
           ))}
         </div>
@@ -131,58 +132,58 @@ export default function DashboardPage() {
   if (error || !stats) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-destructive">{error ?? "Failed to load dashboard."}</p>
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-destructive">{error ?? "Failed to load dashboard."}</p>
       </div>
     );
   }
 
-  const maxRevenue = Math.max(
-    ...stats.monthlyRevenue.map((m) => m.revenue),
-    1
-  );
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Welcome to AutoCount. Here is an overview of your business.
-        </p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">Your business at a glance</p>
+        </div>
+        <Button asChild>
+          <Link href="/invoices/new"><Plus className="mr-2 h-4 w-4" /> New Invoice</Link>
+        </Button>
       </div>
 
       {/* Summary cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Revenue</CardTitle>
+            <DollarSign className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatAmount(stats.revenueThisMonth)}
-            </div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <div className="text-2xl font-bold">{formatAmount(stats.revenueThisMonth)}</div>
+            <p className="text-xs text-muted-foreground">
+              This month
+              {stats.revenueChange !== 0 && (
+                <span className={stats.revenueChange > 0 ? " text-emerald-600" : " text-rose-600"}>
+                  {" "}({stats.revenueChange > 0 ? "+" : ""}{stats.revenueChange}%)
+                </span>
+              )}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <FileText className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {formatAmount(stats.outstandingReceivables)}
-            </div>
+            <div className="text-2xl font-bold">{formatAmount(stats.outstandingReceivables)}</div>
             <p className="text-xs text-muted-foreground">Receivables</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Customers</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <Users className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.activeCustomers}</div>
@@ -192,55 +193,56 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Overdue</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            <AlertTriangle className="h-4 w-4 text-rose-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.overdueInvoices.count}</div>
+            <div className={`text-2xl font-bold ${stats.overdueInvoices.count > 0 ? "text-rose-600" : ""}`}>
+              {stats.overdueInvoices.count}
+            </div>
             <p className="text-xs text-muted-foreground">Invoices past due</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Revenue chart placeholder */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Revenue (Last 6 Months)</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Paid invoices by month
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="flex h-48 items-end gap-2">
-            {stats.monthlyRevenue.map(({ month, revenue }) => (
-              <div key={month} className="flex flex-1 flex-col items-center gap-1">
-                <div
-                  className="w-full min-w-0 rounded-t bg-primary/80 transition-all"
-                  style={{
-                    height: `${Math.max((revenue / maxRevenue) * 100, 4)}%`,
-                  }}
-                />
-                <span className="text-xs text-muted-foreground">{month}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Row 1: Cash Flow (2/3) + Watchlist (1/3) */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <CashFlowWidget
+          data={stats.cashFlow}
+          revenueThisMonth={stats.revenueThisMonth}
+          revenueChange={stats.revenueChange}
+        />
+        <OutstandingWidget
+          receivables={stats.receivablesAging}
+          overdueList={stats.overdueInvoices.list}
+        />
+      </div>
 
+      {/* Row 2: P&L (1/2) + Expenses (1/2) */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Recent invoices */}
+        <ProfitLossWidget
+          thisMonth={stats.plThisMonth}
+          ytd={stats.plYTD}
+        />
+        <ExpensesWidget
+          expenses={stats.topExpenses}
+          total={stats.totalExpenses}
+        />
+      </div>
+
+      {/* Row 3: Recent Invoices + Overdue */}
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Recent Invoices</CardTitle>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/invoices">
-                View all <ArrowRight className="ml-1 h-4 w-4" />
-              </Link>
+              <Link href="/invoices">View all <ArrowRight className="ml-1 h-4 w-4" /></Link>
             </Button>
           </CardHeader>
           <CardContent>
             {stats.recentInvoices.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No invoices yet. Create your first invoice from the Invoices page.
+                No invoices yet.{" "}
+                <Link href="/invoices/new" className="text-primary hover:underline">Create your first invoice</Link>
               </p>
             ) : (
               <Table>
@@ -257,23 +259,13 @@ export default function DashboardPage() {
                   {stats.recentInvoices.map((inv) => (
                     <TableRow key={inv.id}>
                       <TableCell>
-                        <Link
-                          href={`/invoices/${inv.id}`}
-                          className="font-medium hover:underline"
-                        >
-                          {inv.invoiceNo}
-                        </Link>
+                        <Link href={`/invoices/${inv.id}`} className="font-medium hover:underline">{inv.invoiceNo}</Link>
                       </TableCell>
                       <TableCell>{inv.contactName}</TableCell>
                       <TableCell>{formatDate(inv.date)}</TableCell>
                       <TableCell>{formatAmount(inv.total)}</TableCell>
                       <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            statusBadgeVariants[inv.status] ?? "bg-muted"
-                          }
-                        >
+                        <Badge variant="outline" className={statusBadgeVariants[inv.status] ?? "bg-muted"}>
                           {inv.status}
                         </Badge>
                       </TableCell>
@@ -285,26 +277,20 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Overdue invoices alert */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-              Overdue Invoices
+              <AlertTriangle className="h-5 w-5 text-destructive" /> Overdue Invoices
             </CardTitle>
             {stats.overdueInvoices.count > 0 && (
               <Button variant="ghost" size="sm" asChild>
-                <Link href="/invoices?status=OVERDUE">
-                  View all <ArrowRight className="ml-1 h-4 w-4" />
-                </Link>
+                <Link href="/invoices?status=OVERDUE">View all <ArrowRight className="ml-1 h-4 w-4" /></Link>
               </Button>
             )}
           </CardHeader>
           <CardContent>
             {stats.overdueInvoices.count === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No overdue invoices. Great job staying on top of payments!
-              </p>
+              <p className="text-sm text-muted-foreground">No overdue invoices. Great job staying on top of payments!</p>
             ) : (
               <Table>
                 <TableHeader>
@@ -319,12 +305,7 @@ export default function DashboardPage() {
                   {stats.overdueInvoices.list.map((inv) => (
                     <TableRow key={inv.id}>
                       <TableCell>
-                        <Link
-                          href={`/invoices/${inv.id}`}
-                          className="font-medium hover:underline"
-                        >
-                          {inv.invoiceNo}
-                        </Link>
+                        <Link href={`/invoices/${inv.id}`} className="font-medium hover:underline">{inv.invoiceNo}</Link>
                       </TableCell>
                       <TableCell>{inv.contactName}</TableCell>
                       <TableCell>{formatDate(inv.dueDate)}</TableCell>

@@ -31,6 +31,8 @@ model Company {
   invoices         Invoice[]
   invoiceTemplates InvoiceTemplate[]
   customFields     CustomField[]
+  products         Product[]
+  taxEntities      TaxEntity[]
 }
 
 model User {
@@ -115,19 +117,82 @@ enum ContactType {
 }
 
 model Contact {
-  id        String      @id @default(cuid())
-  name      String
-  email     String?
-  phone     String?
-  address   String?
-  taxId     String?
-  type      ContactType @default(CUSTOMER)
-  companyId String
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id              String      @id @default(cuid())
+  code            String?
+  name            String
+  email           String?
+  phone           String?
+  address         String?
+  billingAddress  String?
+  deliveryAddress String?
+  sameAsBilling   Boolean     @default(true)
+  taxId           String?
+  brn             String?     // Business Registration No
+  creditTerms     String?     // e.g. "Net 30", "Net 60", "COD"
+  creditLimit     Float?
+  type            ContactType @default(CUSTOMER)
+  taxEntityId     String?
+  companyId       String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  company   Company    @relation(fields: [companyId], references: [id])
+  taxEntity TaxEntity? @relation(fields: [taxEntityId], references: [id])
+  invoices  Invoice[]
+}
+
+// ─── Tax Entity (Compliance) ────────────────────────────────────
+
+model TaxEntity {
+  id         String   @id @default(cuid())
+  entityName String
+  tin        String?  // LHDN Tax ID Number
+  brn        String?  // Business Registration No (new format)
+  sstNo      String?  // SST Registration No
+  msicCode   String?  // MSIC Code
+  companyId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   company  Company   @relation(fields: [companyId], references: [id])
-  invoices Invoice[]
+  contacts Contact[]
+}
+
+// ─── Product / Inventory ────────────────────────────────────────
+
+model Product {
+  id           String   @id @default(cuid())
+  code         String
+  name         String
+  category     String?
+  description  String?
+  baseUom      String   @default("UNIT") // Unit of Measure
+  defaultPrice Float    @default(0)
+  defaultCost  Float    @default(0)
+  hasVariants  Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  companyId    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company  Company          @relation(fields: [companyId], references: [id])
+  variants ProductVariant[]
+
+  @@unique([code, companyId])
+}
+
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId String
+  name      String   // e.g. "Red", "Blue", "128GB"
+  sku       String?
+  price     Float?   // null = inherit from parent defaultPrice
+  cost      Float?   // null = inherit from parent defaultCost
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 // ─── Invoicing ──────────────────────────────────────────────────

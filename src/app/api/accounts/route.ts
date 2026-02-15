@@ -19,12 +19,12 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { code, name, type, description } = await req.json();
+  const { code, name, type, description, parentId } = await req.json();
   const companyId = (session.user as any).companyId;
 
   try {
     const account = await prisma.account.create({
-      data: { code, name, type, description, companyId },
+      data: { code, name, type, description, companyId, parentId: parentId || null },
     });
     return NextResponse.json(account, { status: 201 });
   } catch (error: any) {

@@ -12,6 +12,8 @@ import {
   BarChart3,
   Settings,
   Palette,
+  Package,
+  Shield,
 } from "lucide-react";
 
 const navigation = [
@@ -19,8 +21,10 @@ const navigation = [
   { name: "Accounts", href: "/accounts", icon: BookOpen },
   { name: "Journal", href: "/journal", icon: FileText },
   { name: "Contacts", href: "/contacts", icon: Users },
+  { name: "Products", href: "/products", icon: Package },
   { name: "Invoices", href: "/invoices", icon: Receipt },
   { name: "Templates", href: "/templates", icon: Palette },
+  { name: "Tax Entities", href: "/tax-entities", icon: Shield },
   { name: "Reports", href: "/reports", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

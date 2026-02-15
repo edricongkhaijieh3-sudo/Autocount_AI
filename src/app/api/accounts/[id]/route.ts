@@ -8,12 +8,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const { code, name, type, description } = await req.json();
+  const { code, name, type, description, parentId } = await req.json();
   const companyId = (session.user as any).companyId;
 
   const account = await prisma.account.updateMany({
     where: { id, companyId },
-    data: { code, name, type, description },
+    data: { code, name, type, description, parentId: parentId || null },
   });
 
   if (account.count === 0) {
