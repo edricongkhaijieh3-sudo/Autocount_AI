@@ -31,8 +31,12 @@ model Company {
   invoices         Invoice[]
   invoiceTemplates InvoiceTemplate[]
   customFields     CustomField[]
-  products         Product[]
-  taxEntities      TaxEntity[]
+  products          Product[]
+  taxEntities       TaxEntity[]
+  currencies        Currency[]
+  taxCodes          TaxCode[]
+  tariffCodes       TariffCode[]
+  productCategories ProductCategory[]
 }
 
 model User {
@@ -158,6 +162,77 @@ model TaxEntity {
   contacts Contact[]
 }
 
+// ─── Currency ───────────────────────────────────────────────────
+
+model Currency {
+  id           String   @id @default(cuid())
+  code         String   // e.g. "MYR", "USD", "SGD"
+  name         String   // e.g. "Malaysian Ringgit"
+  symbol       String   // e.g. "RM", "$"
+  exchangeRate Float    @default(1.0)
+  isBase       Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  companyId    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([code, companyId])
+}
+
+// ─── Tax Code ───────────────────────────────────────────────────
+
+model TaxCode {
+  id          String   @id @default(cuid())
+  code        String   // e.g. "SR", "ZRL", "TX"
+  description String   // e.g. "Standard Rate (6%)"
+  rate        Float    @default(0) // Percentage, e.g. 6.0
+  taxType     String   @default("OUTPUT") // "OUTPUT" | "INPUT" | "BOTH"
+  isActive    Boolean  @default(true)
+  companyId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([code, companyId])
+}
+
+// ─── Tariff Code ────────────────────────────────────────────────
+
+model TariffCode {
+  id          String   @id @default(cuid())
+  code        String   // HS Tariff code, e.g. "8471.30.1000"
+  description String
+  isActive    Boolean  @default(true)
+  companyId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([code, companyId])
+}
+
+// ─── Product Category ───────────────────────────────────────────
+
+model ProductCategory {
+  id          String   @id @default(cuid())
+  code        String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  companyId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  products Product[]
+
+  @@unique([code, companyId])
+}
+
 // ─── Product / Inventory ────────────────────────────────────────
 
 model Product {
@@ -165,6 +240,7 @@ model Product {
   code         String
   name         String
   category     String?
+  categoryId   String?
   description  String?
   baseUom      String   @default("UNIT") // Unit of Measure
   defaultPrice Float    @default(0)
@@ -175,8 +251,9 @@ model Product {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  company  Company          @relation(fields: [companyId], references: [id])
-  variants ProductVariant[]
+  company         Company          @relation(fields: [companyId], references: [id])
+  productCategory ProductCategory? @relation(fields: [categoryId], references: [id])
+  variants        ProductVariant[]
 
   @@unique([code, companyId])
 }

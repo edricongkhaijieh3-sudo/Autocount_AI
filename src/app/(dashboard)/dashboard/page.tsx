@@ -2,30 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { Plus, TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DollarSign,
-  FileText,
-  Users,
-  AlertTriangle,
-  ArrowRight,
-  Plus,
-} from "lucide-react";
 
 import { CashFlowWidget } from "@/components/dashboard/cash-flow-widget";
 import { OutstandingWidget } from "@/components/dashboard/outstanding-widget";
@@ -57,7 +35,12 @@ interface DashboardStats {
     status: string;
     contactName: string;
   }[];
-  cashFlow: { month: string; moneyIn: number; moneyOut: number; netCash: number }[];
+  cashFlow: {
+    month: string;
+    moneyIn: number;
+    moneyOut: number;
+    netCash: number;
+  }[];
   receivablesAging: {
     current: number;
     days31to60: number;
@@ -65,27 +48,53 @@ interface DashboardStats {
     over90: number;
     total: number;
   };
-  plThisMonth: { revenue: number; cogs: number; grossProfit: number; expenses: number; netProfit: number };
-  plYTD: { revenue: number; cogs: number; grossProfit: number; expenses: number; netProfit: number };
+  plThisMonth: {
+    revenue: number;
+    cogs: number;
+    grossProfit: number;
+    expenses: number;
+    netProfit: number;
+  };
+  plYTD: {
+    revenue: number;
+    cogs: number;
+    grossProfit: number;
+    expenses: number;
+    netProfit: number;
+  };
   topExpenses: { name: string; amount: number; percentage: number }[];
   totalExpenses: number;
 }
 
-const statusBadgeVariants: Record<string, string> = {
-  DRAFT: "bg-gray-100 text-gray-800 border-gray-200",
-  SENT: "bg-blue-100 text-blue-800 border-blue-200",
-  PAID: "bg-green-100 text-green-800 border-green-200",
-  OVERDUE: "bg-red-100 text-red-800 border-red-200",
-  CANCELLED: "bg-slate-100 text-slate-800 border-slate-200",
-};
-
 function formatAmount(amount: number): string {
-  return `RM ${amount.toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `RM ${amount.toLocaleString("en-MY", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatCompactAmount(amount: number): string {
+  if (amount >= 1000000)
+    return `RM ${(amount / 1000000).toFixed(1)}M`;
+  if (amount >= 1000) return `RM ${(amount / 1000).toFixed(1)}K`;
+  return `RM ${amount.toFixed(0)}`;
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(dateStr).toLocaleDateString("en-MY", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
+
+const statusColors: Record<string, string> = {
+  DRAFT: "bg-slate-100 text-slate-600",
+  SENT: "bg-blue-50 text-blue-600",
+  PAID: "bg-emerald-50 text-emerald-600",
+  OVERDUE: "bg-red-50 text-red-600",
+  CANCELLED: "bg-gray-100 text-gray-500",
+};
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -97,7 +106,10 @@ export default function DashboardPage() {
       try {
         const res = await fetch("/api/dashboard/stats");
         if (!res.ok) {
-          if (res.status === 401) { setError("Please sign in to view the dashboard."); return; }
+          if (res.status === 401) {
+            setError("Please sign in to view the dashboard.");
+            return;
+          }
           throw new Error("Failed to load stats");
         }
         setStats(await res.json());
@@ -112,17 +124,22 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-8">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">Loading your business overview...</p>
+          <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Loading your business overview...
+          </p>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader className="pb-2"><div className="h-4 w-24 rounded bg-muted" /></CardHeader>
-              <CardContent><div className="h-8 w-32 rounded bg-muted" /></CardContent>
-            </Card>
+            <div
+              key={i}
+              className="bg-white rounded-2xl border border-gray-100 p-6 animate-pulse"
+            >
+              <div className="h-3 w-20 rounded bg-gray-100 mb-4" />
+              <div className="h-7 w-28 rounded bg-gray-100" />
+            </div>
           ))}
         </div>
       </div>
@@ -132,79 +149,122 @@ export default function DashboardPage() {
   if (error || !stats) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-destructive">{error ?? "Failed to load dashboard."}</p>
+        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-6">
+          <p className="text-red-600 text-sm">
+            {error ?? "Failed to load dashboard."}
+          </p>
+        </div>
       </div>
     );
   }
 
+  const kpiCards = [
+    {
+      label: "Sales",
+      sublabel: "This month",
+      value: formatCompactAmount(stats.revenueThisMonth),
+      change: stats.revenueChange,
+      color: "emerald" as const,
+    },
+    {
+      label: "Outstanding",
+      sublabel: "Receivables",
+      value: formatCompactAmount(stats.outstandingReceivables),
+      change: null,
+      color: "amber" as const,
+    },
+    {
+      label: "Overdue",
+      sublabel: `${stats.overdueInvoices.count} invoices`,
+      value: formatCompactAmount(
+        stats.overdueInvoices.list.reduce((sum, inv) => sum + inv.total, 0)
+      ),
+      change: null,
+      color: "red" as const,
+    },
+    {
+      label: "Net Profit",
+      sublabel: "This month",
+      value: formatCompactAmount(stats.plThisMonth.netProfit),
+      change: null,
+      color: "blue" as const,
+    },
+  ];
+
+  const colorMap = {
+    emerald: {
+      bg: "bg-emerald-50",
+      text: "text-emerald-600",
+      icon: "bg-emerald-100",
+    },
+    amber: {
+      bg: "bg-amber-50",
+      text: "text-amber-600",
+      icon: "bg-amber-100",
+    },
+    red: { bg: "bg-red-50", text: "text-red-600", icon: "bg-red-100" },
+    blue: { bg: "bg-blue-50", text: "text-blue-600", icon: "bg-blue-100" },
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">Your business at a glance</p>
+          <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Your business at a glance
+          </p>
         </div>
-        <Button asChild>
-          <Link href="/invoices/new"><Plus className="mr-2 h-4 w-4" /> New Invoice</Link>
+        <Button
+          asChild
+          className="rounded-xl bg-gray-900 text-white hover:bg-gray-800 shadow-none"
+        >
+          <Link href="/invoices/new">
+            <Plus className="mr-2 h-4 w-4" /> New Invoice
+          </Link>
         </Button>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatAmount(stats.revenueThisMonth)}</div>
-            <p className="text-xs text-muted-foreground">
-              This month
-              {stats.revenueChange !== 0 && (
-                <span className={stats.revenueChange > 0 ? " text-emerald-600" : " text-rose-600"}>
-                  {" "}({stats.revenueChange > 0 ? "+" : ""}{stats.revenueChange}%)
+      {/* KPI Summary Row */}
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {kpiCards.map((kpi) => {
+          const c = colorMap[kpi.color];
+          return (
+            <div
+              key={kpi.label}
+              className="bg-white rounded-2xl border border-gray-100 p-6 transition-shadow hover:shadow-md"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-xs font-medium uppercase tracking-wider text-gray-400">
+                  {kpi.label}
                 </span>
-              )}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
-            <FileText className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatAmount(stats.outstandingReceivables)}</div>
-            <p className="text-xs text-muted-foreground">Receivables</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Customers</CardTitle>
-            <Users className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.activeCustomers}</div>
-            <p className="text-xs text-muted-foreground">Active contacts</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Overdue</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-rose-500" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${stats.overdueInvoices.count > 0 ? "text-rose-600" : ""}`}>
-              {stats.overdueInvoices.count}
+                {kpi.change !== null && kpi.change !== 0 && (
+                  <span
+                    className={`inline-flex items-center gap-0.5 text-xs font-medium px-2 py-0.5 rounded-full ${
+                      kpi.change > 0
+                        ? "bg-emerald-50 text-emerald-600"
+                        : "bg-red-50 text-red-600"
+                    }`}
+                  >
+                    {kpi.change > 0 ? (
+                      <TrendingUp className="h-3 w-3" />
+                    ) : (
+                      <TrendingDown className="h-3 w-3" />
+                    )}
+                    {Math.abs(kpi.change)}%
+                  </span>
+                )}
+              </div>
+              <div className={`text-2xl font-bold ${c.text}`}>{kpi.value}</div>
+              <p className="text-xs text-gray-400 mt-1">{kpi.sublabel}</p>
             </div>
-            <p className="text-xs text-muted-foreground">Invoices past due</p>
-          </CardContent>
-        </Card>
+          );
+        })}
       </div>
 
-      {/* Row 1: Cash Flow (2/3) + Watchlist (1/3) */}
+      {/* Row 2: Sales Chart + Invoices */}
       <div className="grid gap-6 lg:grid-cols-3">
         <CashFlowWidget
           data={stats.cashFlow}
@@ -217,106 +277,89 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Row 2: P&L (1/2) + Expenses (1/2) */}
+      {/* Row 3: P&L + Expenses */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <ProfitLossWidget
-          thisMonth={stats.plThisMonth}
-          ytd={stats.plYTD}
-        />
+        <ProfitLossWidget thisMonth={stats.plThisMonth} ytd={stats.plYTD} />
         <ExpensesWidget
           expenses={stats.topExpenses}
           total={stats.totalExpenses}
         />
       </div>
 
-      {/* Row 3: Recent Invoices + Overdue */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Recent Invoices</CardTitle>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/invoices">View all <ArrowRight className="ml-1 h-4 w-4" /></Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {stats.recentInvoices.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No invoices yet.{" "}
-                <Link href="/invoices/new" className="text-primary hover:underline">Create your first invoice</Link>
-              </p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {stats.recentInvoices.map((inv) => (
-                    <TableRow key={inv.id}>
-                      <TableCell>
-                        <Link href={`/invoices/${inv.id}`} className="font-medium hover:underline">{inv.invoiceNo}</Link>
-                      </TableCell>
-                      <TableCell>{inv.contactName}</TableCell>
-                      <TableCell>{formatDate(inv.date)}</TableCell>
-                      <TableCell>{formatAmount(inv.total)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={statusBadgeVariants[inv.status] ?? "bg-muted"}>
-                          {inv.status}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive" /> Overdue Invoices
-            </CardTitle>
-            {stats.overdueInvoices.count > 0 && (
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/invoices?status=OVERDUE">View all <ArrowRight className="ml-1 h-4 w-4" /></Link>
+      {/* Row 4: Recent Invoices */}
+      <div className="bg-white rounded-2xl border border-gray-100">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-50">
+          <h2 className="text-sm font-semibold text-gray-900">
+            Recent Invoices
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="text-xs text-gray-500 hover:text-gray-900"
+          >
+            <Link href="/invoices">
+              View all <ArrowRight className="ml-1 h-3 w-3" />
+            </Link>
+          </Button>
+        </div>
+        <div className="px-6 py-2">
+          {stats.recentInvoices.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-sm text-gray-400">No invoices yet</p>
+              <Button asChild variant="outline" size="sm" className="mt-3 rounded-lg">
+                <Link href="/invoices/new">Create your first invoice</Link>
               </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            {stats.overdueInvoices.count === 0 ? (
-              <p className="text-sm text-muted-foreground">No overdue invoices. Great job staying on top of payments!</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead>Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {stats.overdueInvoices.list.map((inv) => (
-                    <TableRow key={inv.id}>
-                      <TableCell>
-                        <Link href={`/invoices/${inv.id}`} className="font-medium hover:underline">{inv.invoiceNo}</Link>
-                      </TableCell>
-                      <TableCell>{inv.contactName}</TableCell>
-                      <TableCell>{formatDate(inv.dueDate)}</TableCell>
-                      <TableCell>{formatAmount(inv.total)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="text-xs text-gray-400 uppercase tracking-wider">
+                  <th className="text-left py-3 font-medium">Invoice</th>
+                  <th className="text-left py-3 font-medium">Customer</th>
+                  <th className="text-left py-3 font-medium">Date</th>
+                  <th className="text-right py-3 font-medium">Amount</th>
+                  <th className="text-right py-3 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {stats.recentInvoices.slice(0, 5).map((inv) => (
+                  <tr
+                    key={inv.id}
+                    className="group hover:bg-gray-50/50 transition-colors"
+                  >
+                    <td className="py-3.5">
+                      <Link
+                        href={`/invoices/${inv.id}`}
+                        className="text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors"
+                      >
+                        {inv.invoiceNo}
+                      </Link>
+                    </td>
+                    <td className="py-3.5 text-sm text-gray-500">
+                      {inv.contactName}
+                    </td>
+                    <td className="py-3.5 text-sm text-gray-400">
+                      {formatDate(inv.date)}
+                    </td>
+                    <td className="py-3.5 text-sm font-medium text-gray-900 text-right">
+                      {formatAmount(inv.total)}
+                    </td>
+                    <td className="py-3.5 text-right">
+                      <span
+                        className={`inline-block text-xs font-medium px-2.5 py-1 rounded-full ${
+                          statusColors[inv.status] ?? "bg-gray-100 text-gray-500"
+                        }`}
+                      >
+                        {inv.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );

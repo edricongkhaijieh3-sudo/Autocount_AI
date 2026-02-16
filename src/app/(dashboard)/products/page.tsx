@@ -57,11 +57,18 @@ interface ProductVariant {
   isActive: boolean;
 }
 
+interface ProductCategoryRef {
+  id: string;
+  code: string;
+  name: string;
+}
+
 interface Product {
   id: string;
   code: string;
   name: string;
   category: string | null;
+  categoryId: string | null;
   description: string | null;
   baseUom: string;
   defaultPrice: number;
@@ -69,6 +76,7 @@ interface Product {
   hasVariants: boolean;
   isActive: boolean;
   variants: ProductVariant[];
+  productCategory: ProductCategoryRef | null;
 }
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -82,21 +90,10 @@ const UOM_OPTIONS = [
   { value: "SET", label: "Set" },
 ];
 
-const CATEGORY_OPTIONS = [
-  "Electronics",
-  "Clothing",
-  "Food & Beverage",
-  "Furniture",
-  "Services",
-  "Raw Materials",
-  "Packaging",
-  "Other",
-];
-
 const emptyForm = {
   code: "",
   name: "",
-  category: "",
+  categoryId: "",
   description: "",
   baseUom: "UNIT",
   defaultPrice: "",
@@ -118,6 +115,7 @@ function formatRM(value: number): string {
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<ProductCategoryRef[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -150,9 +148,22 @@ export default function ProductsPage() {
     }
   }, [searchQuery, categoryFilter]);
 
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await fetch("/api/product-categories");
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      // Categories are optional
+    }
+  }, []);
+
   useEffect(() => {
     fetchProducts();
-  }, [fetchProducts]);
+    fetchCategories();
+  }, [fetchProducts, fetchCategories]);
 
   // ─── Filtering ──────────────────────────────────────────────
 
@@ -161,16 +172,6 @@ export default function ProductsPage() {
     if (activeFilter === "inactive" && p.isActive) return false;
     return true;
   });
-
-  // ─── Unique categories from existing products ───────────────
-
-  const existingCategories = Array.from(
-    new Set(products.map((p) => p.category).filter(Boolean) as string[])
-  ).sort();
-
-  const allCategories = Array.from(
-    new Set([...CATEGORY_OPTIONS, ...existingCategories])
-  ).sort();
 
   // ─── Variant Management ─────────────────────────────────────
 
@@ -229,7 +230,7 @@ export default function ProductsPage() {
     const payload = {
       code: form.code.trim(),
       name: form.name.trim(),
-      category: form.category || null,
+      categoryId: form.categoryId || null,
       description: form.description.trim() || null,
       baseUom: form.baseUom,
       defaultPrice: form.defaultPrice ? parseFloat(form.defaultPrice) : 0,
@@ -321,7 +322,7 @@ export default function ProductsPage() {
     setForm({
       code: product.code,
       name: product.name,
-      category: product.category || "",
+      categoryId: product.categoryId || "",
       description: product.description || "",
       baseUom: product.baseUom,
       defaultPrice: product.defaultPrice?.toString() || "",
@@ -431,16 +432,17 @@ export default function ProductsPage() {
                 <div className="space-y-2">
                   <Label>Category</Label>
                   <Select
-                    value={form.category}
-                    onValueChange={(v) => updateForm({ category: v })}
+                    value={form.categoryId}
+                    onValueChange={(v) => updateForm({ categoryId: v === "none" ? "" : v })}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      {allCategories.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {cat}
+                      <SelectItem value="none">No Category</SelectItem>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -756,9 +758,9 @@ export default function ProductsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Categories</SelectItem>
-                  {allCategories.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -845,7 +847,7 @@ export default function ProductsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {product.category || "—"}
+                        {product.productCategory?.name || product.category || "—"}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="font-normal">

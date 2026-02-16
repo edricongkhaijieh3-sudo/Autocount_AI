@@ -27,7 +27,13 @@ async function main() {
   await prisma.journalLine.deleteMany();
   await prisma.journalEntry.deleteMany();
   await prisma.contact.deleteMany();
+  await prisma.product.deleteMany();
+  await prisma.productCategory.deleteMany();
   await prisma.account.deleteMany();
+  await prisma.currency.deleteMany();
+  await prisma.taxCode.deleteMany();
+  await prisma.tariffCode.deleteMany();
+  await prisma.taxEntity.deleteMany();
   await prisma.user.deleteMany();
   await prisma.company.deleteMany();
 
@@ -59,6 +65,68 @@ async function main() {
 
   console.log("  Created company and admin user");
   console.log("  Login: admin@techventures.my / admin123");
+
+  // Currencies
+  await prisma.currency.createMany({
+    data: [
+      { code: "MYR", name: "Malaysian Ringgit", symbol: "RM", exchangeRate: 1.0, isBase: true, companyId: company.id },
+      { code: "USD", name: "US Dollar", symbol: "$", exchangeRate: 4.47, isBase: false, companyId: company.id },
+      { code: "SGD", name: "Singapore Dollar", symbol: "S$", exchangeRate: 3.35, isBase: false, companyId: company.id },
+      { code: "EUR", name: "Euro", symbol: "€", exchangeRate: 4.85, isBase: false, companyId: company.id },
+      { code: "GBP", name: "British Pound", symbol: "£", exchangeRate: 5.68, isBase: false, companyId: company.id },
+      { code: "CNY", name: "Chinese Yuan", symbol: "¥", exchangeRate: 0.62, isBase: false, companyId: company.id },
+    ],
+  });
+  console.log("  Created 6 currencies");
+
+  // Tax Codes (Malaysian SST & common codes)
+  await prisma.taxCode.createMany({
+    data: [
+      { code: "SR", description: "Standard Rate (6%)", rate: 6, taxType: "OUTPUT", companyId: company.id },
+      { code: "SR-P", description: "Standard Rate - Purchase (6%)", rate: 6, taxType: "INPUT", companyId: company.id },
+      { code: "ZRL", description: "Zero Rate (0%)", rate: 0, taxType: "OUTPUT", companyId: company.id },
+      { code: "ZRL-P", description: "Zero Rate - Purchase (0%)", rate: 0, taxType: "INPUT", companyId: company.id },
+      { code: "ES", description: "Exempt Supply", rate: 0, taxType: "OUTPUT", companyId: company.id },
+      { code: "OS", description: "Out of Scope", rate: 0, taxType: "BOTH", companyId: company.id },
+      { code: "TX", description: "Tax on Purchase (10%)", rate: 10, taxType: "INPUT", companyId: company.id },
+      { code: "ST-8", description: "Sales Tax (8%)", rate: 8, taxType: "OUTPUT", companyId: company.id },
+      { code: "ST-5", description: "Sales Tax (5%)", rate: 5, taxType: "OUTPUT", companyId: company.id },
+    ],
+  });
+  console.log("  Created 9 tax codes");
+
+  // Tariff Codes (common HS codes)
+  await prisma.tariffCode.createMany({
+    data: [
+      { code: "8471.30.1000", description: "Portable digital automatic data processing machines (laptops)", companyId: company.id },
+      { code: "8471.49.1000", description: "Other digital automatic data processing machines (desktops)", companyId: company.id },
+      { code: "8517.12.0000", description: "Telephones for cellular networks (smartphones)", companyId: company.id },
+      { code: "8523.51.0000", description: "Solid-state non-volatile storage devices (SSDs/USBs)", companyId: company.id },
+      { code: "4901.99.0000", description: "Printed books, brochures and similar printed matter", companyId: company.id },
+      { code: "9403.30.0000", description: "Wooden furniture used in offices", companyId: company.id },
+      { code: "8528.72.0000", description: "Television reception apparatus (monitors)", companyId: company.id },
+      { code: "3926.90.9900", description: "Other articles of plastics", companyId: company.id },
+    ],
+  });
+  console.log("  Created 8 tariff codes");
+
+  // Product Categories
+  const productCategories = await Promise.all([
+    prisma.productCategory.create({ data: { code: "ELEC", name: "Electronics", description: "Electronic devices and components", companyId: company.id } }),
+    prisma.productCategory.create({ data: { code: "SVC", name: "Services", description: "Professional and technical services", companyId: company.id } }),
+    prisma.productCategory.create({ data: { code: "SW", name: "Software", description: "Software licenses and subscriptions", companyId: company.id } }),
+    prisma.productCategory.create({ data: { code: "FURN", name: "Furniture", description: "Office and home furniture", companyId: company.id } }),
+    prisma.productCategory.create({ data: { code: "CLOTH", name: "Clothing", description: "Apparel and accessories", companyId: company.id } }),
+    prisma.productCategory.create({ data: { code: "FNB", name: "Food & Beverage", description: "Food and beverage products", companyId: company.id } }),
+    prisma.productCategory.create({ data: { code: "RAW", name: "Raw Materials", description: "Raw materials and supplies", companyId: company.id } }),
+    prisma.productCategory.create({ data: { code: "PKG", name: "Packaging", description: "Packaging materials", companyId: company.id } }),
+  ]);
+
+  const catMap: Record<string, string> = {};
+  for (const c of productCategories) {
+    catMap[c.code] = c.id;
+  }
+  console.log(`  Created ${productCategories.length} product categories`);
 
   // Chart of Accounts
   const accounts = await Promise.all([

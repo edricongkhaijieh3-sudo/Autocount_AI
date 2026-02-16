@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { buildSystemPrompt, buildResponsePrompt } from "@/lib/ai/system-prompt";
-import { validateQuery } from "@/lib/ai/query-validator";
-import { executeQuery } from "@/lib/ai/query-executor";
+import { validateSQL } from "@/lib/ai/query-validator";
+import { executeSQL } from "@/lib/ai/query-executor";
 import Anthropic from "@anthropic-ai/sdk";
 
 function getClaudeClient() {
@@ -15,6 +15,7 @@ function getClaudeClient() {
 }
 
 export async function POST(req: Request) {
+  // ── Auth ────────────────────────────────────────────────────────
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -22,16 +23,19 @@ export async function POST(req: Request) {
 
   const { question } = await req.json();
   if (!question || typeof question !== "string") {
-    return NextResponse.json({ error: "Question is required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Question is required" },
+      { status: 400 }
+    );
   }
 
   const companyId = (session.user as any).companyId;
-  const companyName = (session.user as any).companyName;
+  const companyName = (session.user as any).companyName ?? "My Company";
 
   try {
     const claude = getClaudeClient();
 
-    // Step 1: Generate Prisma query from the question
+    // ── Step 1: Send question + schema to Claude → get SQL ────────
     const systemPrompt = buildSystemPrompt({
       companyId,
       companyName,
@@ -39,116 +43,175 @@ export async function POST(req: Request) {
       currentDate: new Date().toISOString().split("T")[0],
     });
 
-    const queryResponse = await claude.messages.create({
-      model: "claude-3-haiku-20240307",
+    const sqlResponse = await claude.messages.create({
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 1024,
       system: systemPrompt,
-      messages: [
-        { role: "user", content: question },
-      ],
-      temperature: 0.1,
+      messages: [{ role: "user", content: question }],
+      temperature: 0,
     });
 
     const aiText =
-      queryResponse.content[0]?.type === "text"
-        ? queryResponse.content[0].text
+      sqlResponse.content[0]?.type === "text"
+        ? sqlResponse.content[0].text
         : "";
 
-    // Parse the JSON response from Claude
-    let parsed;
+    // ── Step 2: Parse Claude's JSON response ─────────────────────
+    let parsed: { sql?: string; explanation?: string; error?: boolean; message?: string };
     try {
       const jsonMatch = aiText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found in AI response");
+      if (!jsonMatch) throw new Error("No JSON in response");
       parsed = JSON.parse(jsonMatch[0]);
     } catch {
+      // If Claude didn't return JSON, it might be a conversational response
       return NextResponse.json({
-        response:
-          "I had trouble understanding that question. Could you rephrase it? For example: 'How much did I sell in January?' or 'Show my top 5 customers.'",
+        response: aiText || "I had trouble understanding that. Could you rephrase?",
       });
     }
 
-    // Handle non-query responses (errors, clarifications)
+    // Handle non-query responses (out of scope, clarifications)
     if (parsed.error) {
-      return NextResponse.json({ response: parsed.message });
+      return NextResponse.json({
+        response: parsed.message || "I can only answer questions about your business data.",
+      });
     }
 
-    // Step 2: Validate the query
-    const validation = validateQuery(parsed, companyId);
+    if (!parsed.sql) {
+      return NextResponse.json({
+        response: parsed.message || "I couldn't generate a query for that question. Try asking about sales, invoices, expenses, or customers.",
+      });
+    }
+
+    // ── Step 3: Validate the SQL ─────────────────────────────────
+    const validation = validateSQL(parsed.sql, companyId);
     if (!validation.valid) {
+      console.warn("SQL validation failed:", validation.error, "SQL:", parsed.sql);
       return NextResponse.json({
-        response:
-          validation.error ||
-          "I can only answer questions about your data. Try asking about sales, invoices, or expenses.",
+        response: "I generated a query but it didn't pass safety checks. Could you try rephrasing your question?",
       });
     }
 
-    // Step 3: Execute the query
-    const result = await executeQuery(validation.query!);
+    // ── Step 4: Execute the validated SQL ─────────────────────────
+    const result = await executeSQL(validation.sql!);
     if (!result.success) {
-      if (result.error?.includes("timeout")) {
-        return NextResponse.json({
-          response:
-            "That query is taking longer than expected. Try narrowing your question to a specific date range or customer.",
-        });
+      // If the query failed, try once more with error context
+      const retryResponse = await claude.messages.create({
+        model: "claude-sonnet-4-5-20250929",
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [
+          { role: "user", content: question },
+          { role: "assistant", content: aiText },
+          {
+            role: "user",
+            content: `The SQL query failed with error: "${result.error}". Please fix the query and try again. Remember to use double quotes for PascalCase table names and camelCase column names. Return the same JSON format.`,
+          },
+        ],
+        temperature: 0,
+      });
+
+      const retryText =
+        retryResponse.content[0]?.type === "text"
+          ? retryResponse.content[0].text
+          : "";
+
+      let retryParsed: { sql?: string; explanation?: string } | null = null;
+      try {
+        const retryMatch = retryText.match(/\{[\s\S]*\}/);
+        if (retryMatch) retryParsed = JSON.parse(retryMatch[0]);
+      } catch { /* ignore */ }
+
+      if (retryParsed?.sql) {
+        const retryValidation = validateSQL(retryParsed.sql, companyId);
+        if (retryValidation.valid) {
+          const retryResult = await executeSQL(retryValidation.sql!);
+          if (retryResult.success) {
+            // Success on retry — continue to formatting step
+            return await formatAndRespond(
+              claude,
+              question,
+              retryResult.data,
+              retryParsed.explanation || parsed.explanation || ""
+            );
+          }
+        }
       }
+
+      // Both attempts failed
       return NextResponse.json({
-        response:
-          "I had trouble fetching that data. Could you try rephrasing your question?",
+        response: result.error?.includes("timeout")
+          ? "That query is taking too long. Try narrowing your question to a specific date range or fewer results."
+          : "I had trouble fetching that data. Could you try rephrasing your question?",
       });
     }
 
-    // Step 4: Format the response
-    const responsePrompt = buildResponsePrompt(
+    // ── Step 5: Send results to Claude for formatting ────────────
+    return await formatAndRespond(
+      claude,
       question,
       result.data,
-      "RM",
-      validation.query!.explanation
+      parsed.explanation || ""
     );
-
-    const formattedResponse = await claude.messages.create({
-      model: "claude-3-haiku-20240307",
-      max_tokens: 1024,
-      messages: [{ role: "user", content: responsePrompt }],
-      temperature: 0.3,
-    });
-
-    const responseText =
-      formattedResponse.content[0]?.type === "text"
-        ? formattedResponse.content[0].text
-        : "I found the data but had trouble formatting it. Please try again.";
-
-    return NextResponse.json({ response: responseText });
   } catch (error: any) {
     console.error("Chat error:", error?.message || error);
+    return handleAPIError(error);
+  }
+}
 
-    const errorMessage = error?.message?.toLowerCase() || "";
+/**
+ * Sends raw query results to Claude for human-friendly formatting.
+ */
+async function formatAndRespond(
+  claude: Anthropic,
+  question: string,
+  data: any,
+  explanation: string
+) {
+  const responsePrompt = buildResponsePrompt(question, data, "RM", explanation);
 
-    if (errorMessage.includes("anthropic_api_key") || (errorMessage.includes("api key") && errorMessage.includes("not set"))) {
-      return NextResponse.json({
-        response: "The AI assistant is not configured yet. Please set the ANTHROPIC_API_KEY environment variable.",
-      });
-    }
+  const formatted = await claude.messages.create({
+    model: "claude-sonnet-4-5-20250929",
+    max_tokens: 1024,
+    messages: [{ role: "user", content: responsePrompt }],
+    temperature: 0.3,
+  });
 
-    if (error?.status === 429 || errorMessage.includes("rate") || errorMessage.includes("quota")) {
-      return NextResponse.json({
-        response: "The AI is temporarily rate-limited. Please wait a moment and try again.",
-      });
-    }
+  const responseText =
+    formatted.content[0]?.type === "text"
+      ? formatted.content[0].text
+      : "I found the data but had trouble formatting it. Please try again.";
 
-    if (error?.status === 401 || errorMessage.includes("authentication") || errorMessage.includes("invalid api key")) {
-      return NextResponse.json({
-        response: "The AI API key appears to be invalid. Please check the ANTHROPIC_API_KEY in your environment variables.",
-      });
-    }
+  return NextResponse.json({ response: responseText });
+}
 
-    if (error?.status === 402 || errorMessage.includes("billing") || errorMessage.includes("credit")) {
-      return NextResponse.json({
-        response: "Your Anthropic account needs billing set up. Please check your account at https://console.anthropic.com.",
-      });
-    }
+/**
+ * Maps common Anthropic API errors to user-friendly messages.
+ */
+function handleAPIError(error: any) {
+  const msg = (error?.message || "").toLowerCase();
 
+  if (msg.includes("api key") && (msg.includes("not set") || msg.includes("invalid"))) {
     return NextResponse.json({
-      response: `Something went wrong: ${error?.message || "Unknown error"}. Please try again.`,
+      response: "The AI assistant is not configured yet. Please set the ANTHROPIC_API_KEY.",
     });
   }
+  if (error?.status === 429 || msg.includes("rate") || msg.includes("quota")) {
+    return NextResponse.json({
+      response: "The AI is temporarily rate-limited. Please wait a moment and try again.",
+    });
+  }
+  if (error?.status === 401 || msg.includes("authentication")) {
+    return NextResponse.json({
+      response: "The AI API key appears to be invalid. Please check your ANTHROPIC_API_KEY.",
+    });
+  }
+  if (error?.status === 402 || msg.includes("billing") || msg.includes("credit")) {
+    return NextResponse.json({
+      response: "Your Anthropic account needs billing set up. Check https://console.anthropic.com.",
+    });
+  }
+
+  return NextResponse.json({
+    response: `Something went wrong. Please try again.`,
+  });
 }

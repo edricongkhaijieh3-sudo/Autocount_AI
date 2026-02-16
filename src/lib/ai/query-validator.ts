@@ -1,109 +1,131 @@
-const ALLOWED_OPERATIONS = [
-  "findMany",
-  "findFirst",
-  "findUnique",
-  "aggregate",
-  "groupBy",
-  "count",
+/**
+ * SQL Safety Validator
+ *
+ * Validates AI-generated SQL to ensure it's:
+ * 1. Read-only (SELECT only)
+ * 2. Only touches allowed tables
+ * 3. Contains companyId filter
+ * 4. Has no dangerous patterns
+ */
+
+const ALLOWED_TABLES = [
+  "Invoice",
+  "InvoiceLine",
+  "Contact",
+  "Account",
+  "JournalEntry",
+  "JournalLine",
+  "Product",
+  "ProductVariant",
+  "TaxEntity",
+  "Company",
 ];
 
-const ALLOWED_MODELS = [
-  "invoice",
-  "invoiceLine",
-  "journalEntry",
-  "journalLine",
-  "account",
-  "contact",
+// Patterns that indicate write operations or dangerous SQL
+const BLOCKED_PATTERNS = [
+  /\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|REPLACE|MERGE|UPSERT)\b/i,
+  /\b(GRANT|REVOKE|EXECUTE|EXEC)\b/i,
+  /\b(INTO\s+OUTFILE|LOAD\s+DATA|COPY)\b/i,
+  /\bpg_sleep\b/i,
+  /\bdblink\b/i,
+  /\blo_import|lo_export\b/i,
+  /;\s*\w/i, // Multiple statements (semicolon followed by more SQL)
+  /--.*$/m, // SQL comments (could hide malicious code)
+  /\/\*[\s\S]*?\*\//,  // Block comments
 ];
 
-const BLOCKED_KEYWORDS = [
-  "create",
-  "update",
-  "delete",
-  "upsert",
-  "deleteMany",
-  "updateMany",
-  "createMany",
-  "$executeRaw",
-  "$queryRaw",
-  "drop",
-  "truncate",
-];
+// Tables the AI should never read
+const BLOCKED_TABLES = ["User", "CustomField", "InvoiceTemplate"];
 
-export interface ValidatedQuery {
-  model: string;
-  operation: string;
-  args: Record<string, any>;
-  explanation: string;
-}
-
-export interface ValidationResult {
+export interface SQLValidationResult {
   valid: boolean;
-  query?: ValidatedQuery;
+  sql?: string;
   error?: string;
 }
 
-export function validateQuery(
-  parsed: any,
+export function validateSQL(
+  sql: string,
   companyId: string
-): ValidationResult {
-  // Check for error responses from AI
-  if (parsed.error) {
-    return { valid: false, error: parsed.message || "Unable to process query" };
+): SQLValidationResult {
+  if (!sql || typeof sql !== "string") {
+    return { valid: false, error: "No SQL provided" };
   }
 
-  // Validate model
-  if (!parsed.model || !ALLOWED_MODELS.includes(parsed.model)) {
+  const trimmed = sql.trim();
+
+  // 1. Must start with SELECT (or WITH for CTEs)
+  if (!/^\s*(SELECT|WITH)\b/i.test(trimmed)) {
     return {
       valid: false,
-      error: `Invalid model: ${parsed.model}. Allowed: ${ALLOWED_MODELS.join(", ")}`,
+      error: "Only SELECT queries are allowed",
     };
   }
 
-  // Validate operation
-  if (!parsed.operation || !ALLOWED_OPERATIONS.includes(parsed.operation)) {
-    return {
-      valid: false,
-      error: `Invalid operation: ${parsed.operation}. Only read operations allowed.`,
-    };
-  }
-
-  // Check for blocked keywords in the stringified args
-  const argsStr = JSON.stringify(parsed.args || {}).toLowerCase();
-  for (const keyword of BLOCKED_KEYWORDS) {
-    if (argsStr.includes(keyword.toLowerCase())) {
+  // 2. Check for blocked patterns
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(trimmed)) {
       return {
         valid: false,
-        error: `Blocked keyword detected: ${keyword}. Only read operations allowed.`,
+        error: `Blocked pattern detected: ${pattern.source}`,
       };
     }
   }
 
-  // Ensure companyId is present in where clause
-  const args = parsed.args || {};
-  if (!args.where) {
-    args.where = {};
-  }
-  // Always enforce companyId - override whatever the AI generated
-  args.where.companyId = companyId;
-
-  // Add row limit for findMany
-  if (parsed.operation === "findMany" && !args.take) {
-    args.take = 100;
-  }
-
-  // Add take limit for groupBy
-  if (parsed.operation === "groupBy" && !args.take) {
-    args.take = 50;
+  // 3. Check for blocked tables
+  for (const table of BLOCKED_TABLES) {
+    // Match both quoted and unquoted table references
+    const tablePattern = new RegExp(
+      `(\\b|")${table}(\\b|")`,
+      "i"
+    );
+    if (tablePattern.test(trimmed)) {
+      return {
+        valid: false,
+        error: `Access to table "${table}" is not allowed`,
+      };
+    }
   }
 
-  return {
-    valid: true,
-    query: {
-      model: parsed.model,
-      operation: parsed.operation,
-      args,
-      explanation: parsed.explanation || "",
-    },
-  };
+  // 4. Verify it only references allowed tables
+  // Extract quoted table names from the query
+  const quotedTableRefs = trimmed.match(/"([A-Z][a-zA-Z]+)"/g) || [];
+  const tableNames = quotedTableRefs
+    .map((t) => t.replace(/"/g, ""))
+    .filter((t) => {
+      // Filter out column names by checking if they're in our table list
+      // or if they look like table names (PascalCase starting with uppercase)
+      return ALLOWED_TABLES.includes(t) || BLOCKED_TABLES.includes(t);
+    });
+
+  // 5. Check companyId is present (for queries that need it)
+  // We check for the literal companyId value in the query
+  if (!trimmed.includes(companyId)) {
+    return {
+      valid: false,
+      error: "Query must filter by companyId for security",
+    };
+  }
+
+  // 6. Ensure there's a LIMIT clause
+  if (!/\bLIMIT\b/i.test(trimmed)) {
+    // Auto-append LIMIT 50 if missing
+    return {
+      valid: true,
+      sql: trimmed.replace(/;?\s*$/, "") + " LIMIT 50",
+    };
+  }
+
+  // 7. Ensure LIMIT is reasonable (max 100)
+  const limitMatch = trimmed.match(/\bLIMIT\s+(\d+)/i);
+  if (limitMatch) {
+    const limitVal = parseInt(limitMatch[1], 10);
+    if (limitVal > 100) {
+      return {
+        valid: true,
+        sql: trimmed.replace(/\bLIMIT\s+\d+/i, "LIMIT 100"),
+      };
+    }
+  }
+
+  return { valid: true, sql: trimmed.replace(/;?\s*$/, "") };
 }

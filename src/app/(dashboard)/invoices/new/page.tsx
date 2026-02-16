@@ -252,12 +252,15 @@ export default function NewInvoicePage() {
             </div>
             <div className="space-y-2">
               <Label>Template</Label>
-              <Select value={templateId} onValueChange={setTemplateId}>
+              <Select
+                value={templateId || "none"}
+                onValueChange={(val) => setTemplateId(val === "none" ? "" : val)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select template (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {templates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}

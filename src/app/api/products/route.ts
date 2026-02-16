@@ -15,22 +15,36 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get("category")?.trim() || "";
   const activeOnly = searchParams.get("active") === "true";
 
-  const where: Record<string, unknown> = { companyId };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const where: Record<string, any> = { companyId };
+  const andConditions: Record<string, unknown>[] = [];
 
   if (search) {
-    where.OR = [
-      { name: { contains: search, mode: "insensitive" } },
-      { code: { contains: search, mode: "insensitive" } },
-      { description: { contains: search, mode: "insensitive" } },
-    ];
+    andConditions.push({
+      OR: [
+        { name: { contains: search, mode: "insensitive" } },
+        { code: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+      ],
+    });
   }
 
   if (category) {
-    where.category = category;
+    // Support both categoryId-based and legacy string-based filtering
+    andConditions.push({
+      OR: [
+        { categoryId: category },
+        { category: category },
+      ],
+    });
   }
 
   if (activeOnly) {
     where.isActive = true;
+  }
+
+  if (andConditions.length > 0) {
+    where.AND = andConditions;
   }
 
   const products = await prisma.product.findMany({
@@ -40,6 +54,7 @@ export async function GET(req: NextRequest) {
       variants: {
         orderBy: { name: "asc" },
       },
+      productCategory: true,
     },
   });
 
@@ -60,6 +75,7 @@ export async function POST(req: Request) {
     code,
     name,
     category,
+    categoryId,
     description,
     baseUom,
     defaultPrice,
@@ -83,6 +99,7 @@ export async function POST(req: Request) {
         code: code.trim(),
         name: name.trim(),
         category: category?.trim() || null,
+        categoryId: categoryId || null,
         description: description?.trim() || null,
         baseUom: baseUom || "UNIT",
         defaultPrice: defaultPrice !== undefined ? Number(defaultPrice) : 0,

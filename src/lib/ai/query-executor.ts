@@ -1,67 +1,83 @@
-import { prisma } from "@/lib/prisma";
-import { ValidatedQuery } from "./query-validator";
+/**
+ * SQL Executor
+ *
+ * Runs validated, read-only SQL against the Neon database
+ * using a separate pg pool connection. The query has already
+ * been validated by query-validator.ts before reaching here.
+ */
 
-const QUERY_TIMEOUT_MS = 5000;
+import pg from "pg";
 
-export async function executeQuery(query: ValidatedQuery): Promise<{
+const QUERY_TIMEOUT_MS = 8000;
+
+// Create a dedicated pool for AI queries (separate from Prisma)
+let _pool: pg.Pool | null = null;
+
+function getPool(): pg.Pool {
+  if (!_pool) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error("DATABASE_URL environment variable is not set");
+    }
+    _pool = new pg.Pool({
+      connectionString,
+      ssl: { rejectUnauthorized: false },
+      max: 3,                // Small pool — AI queries shouldn't hog connections
+      idleTimeoutMillis: 30000,
+      statement_timeout: QUERY_TIMEOUT_MS, // DB-level timeout as safety net
+    });
+  }
+  return _pool;
+}
+
+export interface QueryResult {
   success: boolean;
-  data?: any;
+  data?: Record<string, any>[];
+  rowCount?: number;
   error?: string;
-}> {
+}
+
+export async function executeSQL(sql: string): Promise<QueryResult> {
+  const pool = getPool();
+
   try {
-    const model = (prisma as any)[query.model];
-    if (!model) {
-      return { success: false, error: `Model ${query.model} not found` };
-    }
-
-    const operation = model[query.operation];
-    if (!operation) {
-      return {
-        success: false,
-        error: `Operation ${query.operation} not found on ${query.model}`,
-      };
-    }
-
-    // Execute with timeout
-    const result = await Promise.race([
-      operation.call(model, query.args),
-      new Promise((_, reject) =>
+    // Race the query against a timeout
+    const result = await Promise.race<pg.QueryResult>([
+      pool.query(sql),
+      new Promise<never>((_, reject) =>
         setTimeout(
-          () => reject(new Error("Query timeout: exceeded 5 seconds")),
+          () => reject(new Error("Query timeout: exceeded 8 seconds")),
           QUERY_TIMEOUT_MS
         )
       ),
     ]);
 
-    // For groupBy results, resolve contact names if contactId is in the result
-    if (
-      query.operation === "groupBy" &&
-      Array.isArray(result) &&
-      result.length > 0 &&
-      result[0].contactId
-    ) {
-      const contactIds = result.map((r: any) => r.contactId);
-      const contacts = await prisma.contact.findMany({
-        where: { id: { in: contactIds } },
-        select: { id: true, name: true },
-      });
-      const contactMap = Object.fromEntries(
-        contacts.map((c) => [c.id, c.name])
-      );
+    return {
+      success: true,
+      data: result.rows,
+      rowCount: result.rowCount ?? 0,
+    };
+  } catch (error: any) {
+    console.error("AI query execution error:", error.message);
+
+    if (error.message?.includes("timeout")) {
       return {
-        success: true,
-        data: result.map((r: any) => ({
-          ...r,
-          contactName: contactMap[r.contactId] || "Unknown",
-        })),
+        success: false,
+        error:
+          "The query took too long. Try narrowing your question to a specific date range or fewer results.",
       };
     }
 
-    return { success: true, data: result };
-  } catch (error: any) {
+    if (error.message?.includes("permission denied")) {
+      return {
+        success: false,
+        error: "Permission denied — the query tried to access restricted data.",
+      };
+    }
+
     return {
       success: false,
-      error: error.message || "Query execution failed",
+      error: `Query failed: ${error.message}`,
     };
   }
 }

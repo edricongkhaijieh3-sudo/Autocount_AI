@@ -50,6 +50,7 @@ export async function PUT(
     code,
     name,
     category,
+    categoryId,
     description,
     baseUom,
     defaultPrice,
@@ -89,6 +90,7 @@ export async function PUT(
           code: code.trim(),
           name: name.trim(),
           category: category?.trim() || null,
+          categoryId: categoryId !== undefined ? (categoryId || null) : undefined,
           description: description?.trim() || null,
           baseUom: baseUom || "UNIT",
           defaultPrice:

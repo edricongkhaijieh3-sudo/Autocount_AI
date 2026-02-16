@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -140,15 +141,35 @@ function generateNextCode(
 // ─── Page Component ─────────────────────────────────────────────
 
 export default function ContactsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-12"><p className="text-muted-foreground">Loading...</p></div>}>
+      <ContactsPageInner />
+    </Suspense>
+  );
+}
+
+function ContactsPageInner() {
+  const searchParams = useSearchParams();
+  const urlType = searchParams.get("type") as ContactType | null;
+
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [taxEntities, setTaxEntities] = useState<TaxEntity[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [typeFilter, setTypeFilter] = useState<"ALL" | ContactType>("ALL");
+  const [typeFilter, setTypeFilter] = useState<"ALL" | ContactType>(
+    urlType && ["CUSTOMER", "VENDOR", "BOTH"].includes(urlType) ? urlType : "ALL"
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
+
+  // Sync type filter with URL param changes
+  useEffect(() => {
+    if (urlType && ["CUSTOMER", "VENDOR", "BOTH"].includes(urlType)) {
+      setTypeFilter(urlType);
+    }
+  }, [urlType]);
 
   // Form state
   const [form, setForm] = useState(emptyForm);
@@ -313,8 +334,9 @@ export default function ContactsPage() {
 
   function openCreate() {
     setEditingContact(null);
-    const nextCode = generateNextCode(contacts, "CUSTOMER");
-    setForm({ ...emptyForm, code: nextCode });
+    const defaultType: ContactType = urlType === "VENDOR" ? "VENDOR" : "CUSTOMER";
+    const nextCode = generateNextCode(contacts, defaultType);
+    setForm({ ...emptyForm, type: defaultType, code: nextCode });
     setActiveTab("general");
     setDialogOpen(true);
   }
@@ -326,9 +348,15 @@ export default function ContactsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Contacts</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {urlType === "CUSTOMER" ? "Customers" : urlType === "VENDOR" ? "Suppliers" : "Contacts"}
+          </h1>
           <p className="text-muted-foreground">
-            Manage your customers and vendors
+            {urlType === "CUSTOMER"
+              ? "Manage your customers"
+              : urlType === "VENDOR"
+                ? "Manage your suppliers"
+                : "Manage your customers and vendors"}
           </p>
         </div>
         <Dialog
