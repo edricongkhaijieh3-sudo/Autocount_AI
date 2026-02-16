@@ -6,6 +6,14 @@ import { MessageCircle, X, Send, Sparkles } from "lucide-react";
 import { ChatMessages, type ChatMessage } from "./chat-messages";
 import { SuggestionChips } from "./suggestion-chips";
 import { usePageContext } from "@/lib/page-context";
+import type { InvoiceDraft } from "@/lib/ai/invoice-draft";
+import type { AnyCreateDraft } from "@/lib/ai/chat-create-types";
+import { toast } from "sonner";
+
+function getCreateDraftFromMessage(m: ChatMessage): AnyCreateDraft | undefined {
+  return m.contactDraft ?? m.accountDraft ?? m.productDraft ?? m.productCategoryDraft
+    ?? m.currencyDraft ?? m.taxCodeDraft ?? m.tariffCodeDraft ?? m.taxEntityDraft;
+}
 
 const MAX_MESSAGES = 20;
 
@@ -14,6 +22,7 @@ export function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -29,7 +38,6 @@ export function ChatPanel() {
       document.body.style.overflow = "";
       return;
     }
-    // Only lock on smaller screens
     const mq = window.matchMedia("(max-width: 767px)");
     if (mq.matches) {
       document.body.style.overflow = "hidden";
@@ -39,15 +47,30 @@ export function ChatPanel() {
     };
   }, [isOpen]);
 
-  const addMessage = useCallback((role: "user" | "assistant", content: string) => {
-    setMessages((prev) => {
-      const next = [
-        ...prev,
-        { id: crypto.randomUUID(), role, content, timestamp: new Date() },
-      ];
-      return next.slice(-MAX_MESSAGES);
-    });
-  }, []);
+  const addMessage = useCallback(
+    (role: "user" | "assistant", content: string, extras?: Partial<ChatMessage>) => {
+      setMessages((prev) => {
+        const next = [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role,
+            content,
+            timestamp: new Date(),
+            ...extras,
+          },
+        ];
+        return next.slice(-MAX_MESSAGES);
+      });
+    },
+    []
+  );
+
+  const lastDraft = messages.slice().reverse().find((m) => m.role === "assistant" && m.invoiceDraft)?.invoiceDraft;
+  const lastCreateDraft = messages.slice().reverse().map(getCreateDraftFromMessage).find(Boolean) as AnyCreateDraft | undefined;
+  const lastPendingCustomer = messages.slice().reverse().find(
+    (m) => m.role === "assistant" && m.contactNotFound && m.extraction
+  );
 
   const sendMessage = useCallback(
     async (question: string) => {
@@ -60,19 +83,29 @@ export function ChatPanel() {
       setIsLoading(true);
 
       try {
+        const body: Record<string, unknown> = {
+          question: trimmed,
+          pageContext: {
+            currentPage: pageContext.currentPage,
+            currentAction: pageContext.currentAction,
+            pageDescription: pageContext.pageDescription,
+            formData: pageContext.formData,
+            availableActions: pageContext.availableActions,
+          },
+        };
+        if (lastDraft) body.currentDraft = lastDraft;
+        if (lastCreateDraft) body.currentCreateDraft = lastCreateDraft;
+        if (lastPendingCustomer?.contactNotFound && lastPendingCustomer?.extraction) {
+          body.pendingCustomerForInvoice = {
+            customerName: lastPendingCustomer.contactNotFound,
+            extraction: lastPendingCustomer.extraction,
+          };
+        }
+
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            question: trimmed,
-            pageContext: {
-              currentPage: pageContext.currentPage,
-              currentAction: pageContext.currentAction,
-              pageDescription: pageContext.pageDescription,
-              formData: pageContext.formData,
-              availableActions: pageContext.availableActions,
-            },
-          }),
+          body: JSON.stringify(body),
         });
 
         const data = await res.json();
@@ -89,12 +122,40 @@ export function ChatPanel() {
           return;
         }
 
-        addMessage(
-          "assistant",
-          typeof data?.response === "string"
-            ? data.response
-            : "I couldn't process that. Please try again."
-        );
+        const responseText = typeof data?.response === "string" ? data.response : "I couldn't process that. Please try again.";
+        if (data.invoiceDraft) {
+          addMessage("assistant", responseText, {
+            invoiceDraft: data.invoiceDraft,
+            ...(data.contactCreatedForInvoice && { contactCreatedForInvoice: true }),
+          });
+        } else if (data.contactNotFound && data.extraction) {
+          addMessage("assistant", responseText, {
+            contactNotFound: data.contactNotFound,
+            extraction: data.extraction,
+          });
+        } else if (data.invoiceCreated) {
+          addMessage("assistant", responseText, { invoiceCreated: true });
+        } else if (data.contactDraft) {
+          addMessage("assistant", responseText, { contactDraft: data.contactDraft });
+        } else if (data.accountDraft) {
+          addMessage("assistant", responseText, { accountDraft: data.accountDraft });
+        } else if (data.productDraft) {
+          addMessage("assistant", responseText, { productDraft: data.productDraft });
+        } else if (data.productCategoryDraft) {
+          addMessage("assistant", responseText, { productCategoryDraft: data.productCategoryDraft });
+        } else if (data.currencyDraft) {
+          addMessage("assistant", responseText, { currencyDraft: data.currencyDraft });
+        } else if (data.taxCodeDraft) {
+          addMessage("assistant", responseText, { taxCodeDraft: data.taxCodeDraft });
+        } else if (data.tariffCodeDraft) {
+          addMessage("assistant", responseText, { tariffCodeDraft: data.tariffCodeDraft });
+        } else if (data.taxEntityDraft) {
+          addMessage("assistant", responseText, { taxEntityDraft: data.taxEntityDraft });
+        } else if (data.createDraftApproved) {
+          addMessage("assistant", responseText, { createDraftApproved: true });
+        } else {
+          addMessage("assistant", responseText);
+        }
       } catch {
         const fallback = "Network error. Please check your connection and try again.";
         setError(fallback);
@@ -104,8 +165,127 @@ export function ChatPanel() {
         inputRef.current?.focus();
       }
     },
-    [addMessage, isLoading, pageContext]
+    [addMessage, isLoading, pageContext, lastDraft, lastCreateDraft, lastPendingCustomer]
   );
+
+  const draftToInvoicePayload = useCallback((draft: InvoiceDraft) => ({
+    contactId: draft.contactId,
+    date: draft.date,
+    dueDate: draft.dueDate,
+    notes: draft.notes || undefined,
+    lines: draft.lineItems.map((line) => ({
+      itemName: line.description,
+      itemCode: "",
+      description: line.description,
+      quantity: line.quantity,
+      unitPrice: line.amount / line.quantity,
+      discount: 0,
+      taxRate: line.taxRate ?? draft.taxRateDefault,
+    })),
+  }), []);
+
+  const handleApproveDraft = useCallback(
+    async (draft: InvoiceDraft) => {
+      setIsApproving(true);
+      try {
+        const res = await fetch("/api/invoices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(draftToInvoicePayload(draft)),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data?.error || "Failed to create invoice");
+          addMessage("assistant", data?.error || "Failed to save the invoice. Try again or create it from the Invoices page.");
+          return;
+        }
+        toast.success(`Invoice ${data.invoiceNo ?? ""} created`);
+        addMessage("assistant", `Invoice **${data.invoiceNo ?? draft.invoiceNo}** has been created. You can view or send it from the Invoices page.`, { invoiceCreated: true });
+        setMessages((prev) =>
+          prev.map((m) => (m.invoiceDraft ? { ...m, invoiceDraft: undefined } : m))
+        );
+      } catch {
+        toast.error("Network error");
+        addMessage("assistant", "Couldn't save the invoice. Please try again.");
+      } finally {
+        setIsApproving(false);
+      }
+    },
+    [addMessage, draftToInvoicePayload]
+  );
+
+  const handleCancelDraft = useCallback((messageId: string) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, invoiceDraft: undefined } : m))
+    );
+    addMessage("assistant", "Draft cancelled. You can create a new invoice anytime by asking in the chat.");
+  }, [addMessage]);
+
+  const handleApproveCreateDraft = useCallback(
+    async (draft: AnyCreateDraft) => {
+      setIsApproving(true);
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: "approve",
+            currentCreateDraft: draft,
+            pageContext: {
+              currentPage: pageContext.currentPage,
+              currentAction: pageContext.currentAction,
+              pageDescription: pageContext.pageDescription,
+              formData: pageContext.formData,
+              availableActions: pageContext.availableActions,
+            },
+          }),
+        });
+        const data = await res.json();
+        const responseText = typeof data?.response === "string" ? data.response : "Saved.";
+        if (!res.ok) {
+          toast.error(data?.error || "Failed to save");
+          addMessage("assistant", data?.response || responseText);
+          return;
+        }
+        toast.success("Created successfully");
+        addMessage("assistant", responseText, { createDraftApproved: true });
+        setMessages((prev) =>
+          prev.map((m) => {
+            const d = getCreateDraftFromMessage(m);
+            if (!d) return m;
+            return { ...m, contactDraft: undefined, accountDraft: undefined, productDraft: undefined, productCategoryDraft: undefined, currencyDraft: undefined, taxCodeDraft: undefined, tariffCodeDraft: undefined, taxEntityDraft: undefined };
+          })
+        );
+      } catch {
+        toast.error("Network error");
+        addMessage("assistant", "Couldn't save. Please try again.");
+      } finally {
+        setIsApproving(false);
+      }
+    },
+    [addMessage, pageContext]
+  );
+
+  const handleCancelCreateDraft = useCallback((messageId: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? {
+              ...m,
+              contactDraft: undefined,
+              accountDraft: undefined,
+              productDraft: undefined,
+              productCategoryDraft: undefined,
+              currencyDraft: undefined,
+              taxCodeDraft: undefined,
+              tariffCodeDraft: undefined,
+              taxEntityDraft: undefined,
+            }
+          : m
+      )
+    );
+    addMessage("assistant", "Cancelled. You can create one anytime by asking in the chat.");
+  }, [addMessage]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,7 +345,16 @@ export function ChatPanel() {
             />
           </div>
         ) : (
-          <ChatMessages messages={messages} isLoading={isLoading} className="min-h-0" />
+          <ChatMessages
+            messages={messages}
+            isLoading={isLoading}
+            className="min-h-0"
+            onApproveDraft={handleApproveDraft}
+            onCancelDraft={handleCancelDraft}
+            onApproveCreateDraft={handleApproveCreateDraft}
+            onCancelCreateDraft={handleCancelCreateDraft}
+            isApproving={isApproving}
+          />
         )}
       </div>
 

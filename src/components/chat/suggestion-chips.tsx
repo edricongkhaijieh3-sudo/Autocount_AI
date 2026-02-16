@@ -19,6 +19,7 @@ interface Suggestion {
 }
 
 const DEFAULT_SUGGESTIONS: Suggestion[] = [
+  { text: "Create an invoice for a customer", icon: FileText },
   { text: "Total sales this month", icon: DollarSign },
   { text: "Outstanding invoices", icon: FileText },
   { text: "Top 5 customers", icon: Users },
@@ -27,12 +28,14 @@ const DEFAULT_SUGGESTIONS: Suggestion[] = [
 
 const PAGE_SUGGESTIONS: Record<string, Suggestion[]> = {
   "invoices/new": [
+    { text: "Create invoice for ABC Sdn Bhd, RM 5,000 for consulting, due in 30 days", icon: FileText },
     { text: "What payment terms should I use?", icon: HelpCircle },
     { text: "How do I add tax to this invoice?", icon: Calculator },
     { text: "What's the customer's last invoice?", icon: FileText },
     { text: "Help me fill in this invoice", icon: ClipboardList },
   ],
   invoices: [
+    { text: "Create an invoice for a customer", icon: FileText },
     { text: "Which invoices are overdue?", icon: FileText },
     { text: "Total outstanding amount", icon: DollarSign },
     { text: "Revenue breakdown by month", icon: TrendingUp },

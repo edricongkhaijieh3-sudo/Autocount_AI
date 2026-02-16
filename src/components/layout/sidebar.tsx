@@ -46,6 +46,7 @@ interface NavSection {
 
 const standalone: NavItem[] = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Invoices", href: "/invoices", icon: Receipt },
 ];
 
 const masterData: NavSection = {
