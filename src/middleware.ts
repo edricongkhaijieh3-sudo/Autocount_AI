@@ -8,19 +8,23 @@ export async function middleware(request: NextRequest) {
     secret: process.env.NEXTAUTH_SECRET,
   });
 
-  const isAuthPage =
-    request.nextUrl.pathname.startsWith("/login") ||
-    request.nextUrl.pathname.startsWith("/register");
+  const { pathname } = request.nextUrl;
 
-  // If user is on auth page and already logged in, redirect to dashboard
+  const isAuthPage =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/register");
+
+  const isSelectCompanyPage = pathname.startsWith("/select-company");
+
+  // If user is on auth page (login/register) and already logged in, redirect to company selector
   if (isAuthPage && token) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(new URL("/select-company", request.url));
   }
 
-  // If user is not logged in and trying to access protected routes
+  // If user is not logged in and trying to access any protected route
   if (!isAuthPage && !token) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
+    loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -37,6 +41,13 @@ export const config = {
     "/templates/:path*",
     "/settings/:path*",
     "/reports/:path*",
+    "/products/:path*",
+    "/currencies/:path*",
+    "/tax-codes/:path*",
+    "/tariff-codes/:path*",
+    "/tax-entities/:path*",
+    "/product-categories/:path*",
+    "/select-company",
     "/login",
     "/register",
   ],

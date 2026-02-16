@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { usePageTracking } from "@/hooks/use-page-tracking";
 import {
   Card,
   CardContent,
@@ -114,6 +115,12 @@ function formatRM(value: number): string {
 // ─── Page Component ─────────────────────────────────────────────
 
 export default function ProductsPage() {
+  usePageTracking({
+    currentPage: "products",
+    pageDescription: "Product List",
+    availableActions: ["add product", "edit product", "manage variants", "filter by category"],
+  });
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategoryRef[]>([]);
   const [loading, setLoading] = useState(true);

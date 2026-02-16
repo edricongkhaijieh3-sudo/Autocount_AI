@@ -45,12 +45,31 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.companyId = (user as any).companyId;
         token.companyName = (user as any).companyName;
         token.role = (user as any).role;
       }
+
+      // When session.update() is called from the client (e.g. after company switch),
+      // re-read the user's current companyId from the database
+      if (trigger === "update" && token.sub) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: token.sub },
+            include: { company: true },
+          });
+          if (dbUser) {
+            token.companyId = dbUser.companyId;
+            token.companyName = dbUser.company.name;
+            token.role = dbUser.role;
+          }
+        } catch (error) {
+          console.error("JWT refresh error:", error);
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {

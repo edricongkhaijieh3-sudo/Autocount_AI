@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ import {
   FolderTree,
   Building2,
   User,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -95,9 +97,13 @@ const bottomNav: NavItem[] = [
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
-// ─── Sidebar Component ───────────────────────────────────────────
+// ─── Sidebar Content (shared between desktop and mobile) ─────────
 
-export function Sidebar() {
+function SidebarContent({
+  onNavigate,
+}: {
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     "MASTER DATA": true,
@@ -112,13 +118,11 @@ export function Sidebar() {
   }
 
   function isActive(href: string): boolean {
-    // Strip query params for comparison
     const basePath = href.split("?")[0];
     if (pathname === basePath) return true;
     if (pathname?.startsWith(basePath + "/")) return true;
-    // Check if query params match for contacts filtering
     if (href.includes("?") && pathname === "/contacts") {
-      return false; // Don't highlight both Customer & Supplier when on /contacts
+      return false;
     }
     return false;
   }
@@ -128,6 +132,7 @@ export function Sidebar() {
     return (
       <Link
         href={item.href}
+        onClick={onNavigate}
         className={cn(
           "group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors",
           active
@@ -189,41 +194,103 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-slate-900">
-      <div className="flex flex-col flex-grow pt-5 overflow-y-auto">
-        <div className="flex items-center flex-shrink-0 px-4">
-          <h1 className="text-xl font-bold text-white tracking-tight">
-            <span className="text-blue-400">Auto</span>Count
-          </h1>
-        </div>
-
-        <nav className="mt-8 flex-1 px-2 space-y-1">
-          {/* Dashboard */}
-          {standalone.map((item) => (
-            <NavLink key={item.href} item={item} />
-          ))}
-
-          {/* Divider */}
-          <div className="pt-4" />
-
-          {/* Master Data */}
-          <Section section={masterData} />
-
-          {/* Divider */}
-          <div className="pt-3" />
-
-          {/* Transactions */}
-          <Section section={transactions} />
-
-          {/* Divider */}
-          <div className="pt-3" />
-
-          {/* Bottom nav */}
-          {bottomNav.map((item) => (
-            <NavLink key={item.href} item={item} />
-          ))}
-        </nav>
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-5">
+      <div className="flex items-center justify-between flex-shrink-0 px-4">
+        <h1 className="text-xl font-bold text-white tracking-tight">
+          <span className="text-blue-400">Auto</span>Count
+        </h1>
+        {/* Close button for mobile only */}
+        {onNavigate && (
+          <button
+            onClick={onNavigate}
+            className="md:hidden rounded-md p-1 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
+
+      <nav className="mt-8 flex-1 px-2 space-y-1 pb-4">
+        {standalone.map((item) => (
+          <NavLink key={item.href} item={item} />
+        ))}
+
+        <div className="pt-4" />
+        <Section section={masterData} />
+        <div className="pt-3" />
+        <Section section={transactions} />
+        <div className="pt-3" />
+
+        {bottomNav.map((item) => (
+          <NavLink key={item.href} item={item} />
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+// ─── Mobile Sidebar Drawer ──────────────────────────────────────
+
+export function MobileSidebar({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Lock body scroll when open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <>
+      {/* Backdrop */}
+      <div
+        className={cn(
+          "fixed inset-0 z-[9999] bg-black/60 transition-opacity duration-300 md:hidden",
+          open ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+        onClick={onClose}
+        aria-label="Close menu"
+      />
+
+      {/* Drawer */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-[10000] flex w-72 flex-col overflow-hidden bg-slate-900 transition-transform duration-300 ease-out md:hidden",
+          open ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <SidebarContent onNavigate={onClose} />
+      </aside>
+    </>,
+    document.body
+  );
+}
+
+// ─── Desktop Sidebar ────────────────────────────────────────────
+
+export function Sidebar() {
+  return (
+    <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 md:overflow-hidden bg-slate-900">
+      <SidebarContent />
     </aside>
   );
 }

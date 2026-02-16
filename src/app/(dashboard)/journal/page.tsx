@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePageTracking } from "@/hooks/use-page-tracking";
 import {
   Card,
   CardContent,
@@ -72,6 +73,12 @@ const formatAmount = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function JournalPage() {
+  usePageTracking({
+    currentPage: "journal",
+    pageDescription: "Journal Entries",
+    availableActions: ["create entry", "view entries", "search entries"],
+  });
+
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);

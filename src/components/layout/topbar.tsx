@@ -1,6 +1,7 @@
 "use client";
 
 import { signOut, useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,10 +11,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { LogOut, User, Building2 } from "lucide-react";
+import { LogOut, User, Building2, ArrowLeftRight, Menu } from "lucide-react";
 
-export function Topbar() {
+interface TopbarProps {
+  onMenuClick?: () => void;
+}
+
+export function Topbar({ onMenuClick }: TopbarProps) {
   const { data: session } = useSession();
+  const router = useRouter();
 
   const initials = session?.user?.name
     ?.split(" ")
@@ -21,23 +27,35 @@ export function Topbar() {
     .join("")
     .toUpperCase() || "U";
 
+  const companyName = (session?.user as any)?.companyName || "My Company";
+
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-white px-4 sm:px-6">
-      <div className="flex flex-1 items-center justify-between">
-        <div className="md:hidden">
-          <h1 className="text-lg font-bold">
-            <span className="text-blue-600">Auto</span>Count
-          </h1>
-        </div>
-        <div className="hidden md:block">
-          <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-            <Building2 className="h-3.5 w-3.5" />
-            {(session?.user as any)?.companyName || "My Company"}
-          </p>
-        </div>
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-white px-3 sm:px-6">
+      {/* Mobile: Hamburger + Logo */}
+      <button
+        type="button"
+        onClick={onMenuClick}
+        className="md:hidden rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        aria-label="Open navigation menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      <div className="flex flex-1 items-center justify-between min-w-0">
+        {/* Company name — visible on all screens */}
+        <button
+          onClick={() => router.push("/select-company")}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors group min-w-0"
+        >
+          <Building2 className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{companyName}</span>
+          <ArrowLeftRight className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block" />
+        </button>
+
+        {/* User avatar */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+            <Button variant="ghost" className="relative h-8 w-8 rounded-full shrink-0">
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-blue-600 text-white text-xs">
                   {initials}
@@ -55,6 +73,10 @@ export function Topbar() {
               </div>
             </div>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push("/select-company")}>
+              <Building2 className="mr-2 h-4 w-4" />
+              Switch Company
+            </DropdownMenuItem>
             <DropdownMenuItem>
               <User className="mr-2 h-4 w-4" />
               Profile

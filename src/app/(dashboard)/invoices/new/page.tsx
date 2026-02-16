@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { usePageTracking, useFormTracking } from "@/hooks/use-page-tracking";
 import {
   Card,
   CardContent,
@@ -102,6 +103,29 @@ export default function NewInvoicePage() {
       taxRate: 0,
     },
   ]);
+
+  // Track page context for AI assistant
+  usePageTracking({
+    currentPage: "invoices/new",
+    currentAction: "creating_invoice",
+    pageDescription: "Create New Invoice",
+    availableActions: ["select customer", "set date", "add line items", "set tax rate", "add notes", "save invoice"],
+  });
+
+  const selectedContact = contacts.find((c) => c.id === contactId);
+  useFormTracking({
+    customer: selectedContact?.name || "",
+    date,
+    dueDate,
+    lineItemCount: lines.length,
+    items: lines.filter((l) => l.itemName).map((l) => ({
+      name: l.itemName,
+      quantity: l.quantity,
+      unitPrice: l.unitPrice,
+      taxRate: l.taxRate,
+    })),
+    notes: notes || undefined,
+  });
 
   useEffect(() => {
     Promise.all([

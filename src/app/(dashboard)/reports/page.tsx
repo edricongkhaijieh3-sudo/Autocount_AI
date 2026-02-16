@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePageTracking } from "@/hooks/use-page-tracking";
 import {
   Card,
   CardContent,
@@ -86,6 +87,12 @@ interface APData {
 // ── Component ────────────────────────────────────────────────
 
 export default function ReportsPage() {
+  usePageTracking({
+    currentPage: "reports",
+    pageDescription: "Financial Reports",
+    availableActions: ["generate P&L", "generate balance sheet", "view trial balance", "aged receivables"],
+  });
+
   const [dateFrom, setDateFrom] = useState(startOfYear());
   const [dateTo, setDateTo] = useState(today());
   const [loading, setLoading] = useState("");

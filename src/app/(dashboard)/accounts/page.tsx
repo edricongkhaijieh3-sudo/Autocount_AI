@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePageTracking } from "@/hooks/use-page-tracking";
 import {
   Card,
   CardContent,
@@ -231,6 +232,12 @@ function getDescendantIds(
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function AccountsPage() {
+  usePageTracking({
+    currentPage: "accounts",
+    pageDescription: "Chart of Accounts",
+    availableActions: ["add account", "edit account", "filter by type"],
+  });
+
   // Data
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { usePageTracking } from "@/hooks/use-page-tracking";
 import {
   Card,
   CardContent,
@@ -59,6 +60,12 @@ function formatAmount(amount: number): string {
 }
 
 export default function InvoicesPage() {
+  usePageTracking({
+    currentPage: "invoices",
+    pageDescription: "Invoice List",
+    availableActions: ["view invoices", "create invoice", "filter by status", "search invoices"],
+  });
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");

@@ -34,6 +34,7 @@ async function main() {
   await prisma.taxCode.deleteMany();
   await prisma.tariffCode.deleteMany();
   await prisma.taxEntity.deleteMany();
+  await prisma.userCompany.deleteMany();
   await prisma.user.deleteMany();
   await prisma.company.deleteMany();
 
@@ -48,18 +49,29 @@ async function main() {
       currency: "MYR",
       taxId: "SST-0001-2026",
       regNo: "202001012345 (1234567-A)",
+      onboardingComplete: true,
+      industry: "services",
     },
   });
 
   // Create admin user (password: admin123)
   const passwordHash = await bcrypt.hash("admin123", 12);
-  await prisma.user.create({
+  const user = await prisma.user.create({
     data: {
       name: "Admin User",
       email: "admin@techventures.my",
       passwordHash,
       role: "admin",
       companyId: company.id,
+    },
+  });
+
+  // Link user to company via UserCompany join table
+  await prisma.userCompany.create({
+    data: {
+      userId: user.id,
+      companyId: company.id,
+      role: "admin",
     },
   });
 

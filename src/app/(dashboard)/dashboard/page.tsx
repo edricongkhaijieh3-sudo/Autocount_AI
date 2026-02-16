@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Plus, TrendingUp, TrendingDown, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { usePageTracking } from "@/hooks/use-page-tracking";
 
 import { CashFlowWidget } from "@/components/dashboard/cash-flow-widget";
 import { OutstandingWidget } from "@/components/dashboard/outstanding-widget";
@@ -97,6 +98,12 @@ const statusColors: Record<string, string> = {
 };
 
 export default function DashboardPage() {
+  usePageTracking({
+    currentPage: "dashboard",
+    pageDescription: "Business Dashboard",
+    availableActions: ["view revenue", "view outstanding", "create invoice", "view reports"],
+  });
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -31,7 +31,7 @@ export default function LoginPage() {
         setError("Invalid email or password. Please try again.");
         setLoading(false);
       } else if (result?.ok) {
-        router.push("/dashboard");
+        router.push("/select-company");
       } else {
         setError("Something went wrong. Please try again.");
         setLoading(false);

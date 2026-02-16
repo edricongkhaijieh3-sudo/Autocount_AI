@@ -39,6 +39,16 @@ export async function POST(req: Request) {
       include: { users: true },
     });
 
+    // Link user to company in the join table
+    const createdUser = company.users[0];
+    await prisma.userCompany.create({
+      data: {
+        userId: createdUser.id,
+        companyId: company.id,
+        role: "admin",
+      },
+    });
+
     // Seed default chart of accounts for the new company
     const defaultAccounts = [
       { code: "1000", name: "Cash", type: "ASSET" as const },

@@ -119,10 +119,16 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
-    @apply bg-background text-foreground;
   }
+}
+
+/*
+ * Ensure the AI chat FAB and panel are always clickable,
+ * even when Radix Dialog sets pointer-events:none on <body>.
+ */
+[data-chat-portal] {
+  pointer-events: auto !important;
 }

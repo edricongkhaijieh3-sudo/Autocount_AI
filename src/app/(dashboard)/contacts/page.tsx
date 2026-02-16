@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { usePageTracking } from "@/hooks/use-page-tracking";
 import {
   Card,
   CardContent,
@@ -151,6 +152,14 @@ export default function ContactsPage() {
 function ContactsPageInner() {
   const searchParams = useSearchParams();
   const urlType = searchParams.get("type") as ContactType | null;
+
+  const pageLabel = urlType === "CUSTOMER" ? "Customers" : urlType === "VENDOR" ? "Suppliers" : "Contacts";
+  usePageTracking({
+    currentPage: "contacts",
+    currentAction: urlType ? `viewing_${urlType.toLowerCase()}s` : undefined,
+    pageDescription: pageLabel,
+    availableActions: ["add contact", "edit contact", "filter by type", "search contacts"],
+  });
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [taxEntities, setTaxEntities] = useState<TaxEntity[]>([]);
